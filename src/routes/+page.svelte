@@ -310,6 +310,65 @@
         </article>
       </div>
 
+      {#if result?.ndcs?.length}
+        <article class="rounded-3xl bg-white p-6 shadow-lg ring-1 ring-amber-100">
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-neutral-900">Available NDC Packages</h3>
+            <span class="text-sm text-neutral-500">{result.ndcs.length} option{result.ndcs.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="mt-4 divide-y divide-amber-100 border border-amber-100 rounded-2xl">
+            {#each result.ndcs as ndc, index}
+              <div class="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div class="space-y-1">
+                  <div class="flex items-center gap-2">
+                    <a
+                      class="text-base font-semibold text-neutral-900 underline decoration-amber-300 decoration-2 underline-offset-4"
+                      href={`https://www.aapc.com/codes/ndc-lookup/${ndc.formattedNdc}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {ndc.formattedNdc}
+                    </a>
+                    {#if index === 0}
+                      <span class="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                        Recommended
+                      </span>
+                    {/if}
+                    {#if ndc.inactive}
+                      <span class="rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+                        Inactive
+                      </span>
+                    {/if}
+                  </div>
+                  <div class="text-sm text-neutral-600">
+                    {ndc.description || ndc.packageDescription || 'Package details unavailable'}
+                  </div>
+                  {#if ndc.labelerName}
+                    <div class="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                      {ndc.labelerName}
+                    </div>
+                  {/if}
+                </div>
+                <div class="flex flex-wrap gap-3 text-sm text-neutral-700 sm:text-right">
+                  <span class="rounded-full bg-amber-50 px-3 py-1">
+                    Size: {formatNumber(ndc.size)} {ndc.unit}{ndc.size === 1 ? '' : 's'}
+                  </span>
+                  <span class="rounded-full bg-amber-50 px-3 py-1">
+                    Packs: {ndc.packs}
+                  </span>
+                  <span class="rounded-full bg-amber-50 px-3 py-1">
+                    Dispensed: {formatNumber(ndc.dispensedQty)}
+                  </span>
+                  <span class="rounded-full bg-amber-50 px-3 py-1">
+                    Overfill: {(ndc.overfillPct * 100).toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </article>
+      {/if}
+
       <article class="rounded-3xl bg-neutral-900 p-6 text-neutral-100 shadow-lg ring-1 ring-neutral-800">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <h3 class="text-lg font-semibold">Structured JSON Output</h3>
