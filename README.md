@@ -2,7 +2,11 @@
 
 # RUN NDC · NDC Packaging & Quantity Calculator
 
+[![Vercel](https://vercelbadge.vercel.app/api/robglnn/runndc)](https://runndc.vercel.app/)
+
 Match prescriptions to valid NDCs, compute dispense quantities, and surface FDA-aligned overfill warnings in a Function Health–inspired interface.
+
+🔗 **Live Demo:** https://runndc.vercel.app/
 
 </div>
 
