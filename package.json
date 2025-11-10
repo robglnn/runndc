@@ -1,0 +1,36 @@
+{
+	"name": "runndc",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"test": "vitest",
+		"test:watch": "vitest --ui"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-vercel": "^6.1.1",
+		"@sveltejs/kit": "^2.48.4",
+		"@sveltejs/vite-plugin-svelte": "^6.2.1",
+		"@tailwindcss/typography": "^0.5.19",
+		"@vitest/ui": "^4.0.8",
+		"autoprefixer": "^10.4.21",
+		"jsdom": "^27.1.0",
+		"msw": "^2.12.1",
+		"postcss": "^8.5.6",
+		"svelte": "^5.43.5",
+		"svelte-check": "^4.3.3",
+		"tailwindcss": "^3.4.15",
+		"typescript": "^5.9.3",
+		"vite": "^7.2.2",
+		"vitest": "^4.0.8"
+	},
+	"dependencies": {
+		"openai": "^6.8.1"
+	}
+}

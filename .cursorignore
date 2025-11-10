@@ -1,0 +1,8 @@
+node_modules
+.pnpm-store
+.vercel
+.env
+.env.*
+build
+.svelte-kit
+coverage
