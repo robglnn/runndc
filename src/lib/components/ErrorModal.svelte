@@ -1,28 +1,40 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onMount } from 'svelte'
+  import { browser } from '$app/environment'
   import { errors } from '$lib/stores'
   import type { AppError } from '$lib/stores'
   import { fly } from 'svelte/transition'
 
   let current: AppError | null = null
-
-  const unsubscribe = errors.subscribe((value) => {
-    current = value
-  })
+  let unsubscribe: (() => void) | null = null
+  let cleanupOverflow = false
 
   function close() {
     errors.clear()
   }
 
-  $: if (current) {
-    document.body.style.overflow = 'hidden'
-  } else {
-    document.body.style.overflow = ''
-  }
+  onMount(() => {
+    unsubscribe = errors.subscribe((value) => {
+      current = value
+      if (browser) {
+        if (value && !cleanupOverflow) {
+          document.body.style.overflow = 'hidden'
+          cleanupOverflow = true
+        } else if (!value && cleanupOverflow) {
+          document.body.style.overflow = ''
+          cleanupOverflow = false
+        }
+      }
+    })
 
-  onDestroy(() => {
-    unsubscribe()
-    document.body.style.overflow = ''
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
+      }
+      if (browser) {
+        document.body.style.overflow = ''
+      }
+    }
   })
 </script>
 
