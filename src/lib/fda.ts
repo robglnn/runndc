@@ -28,6 +28,10 @@ export async function getNdcPackagesByRxcui(
   const url = `https://api.fda.gov/drug/ndc.json?search=rxcui.exact:${encodeURIComponent(rxcui)}&limit=200`
   const response = await fetcher(url)
 
+  if (response.status === 404) {
+    return []
+  }
+
   if (!response.ok) {
     throw new Error(`FDA NDC lookup failed (${response.status})`)
   }
@@ -43,6 +47,10 @@ export async function getNdcPackagesByPlainNdc(
   const formatted = formatNdc11(ndc11)
   const url = `https://api.fda.gov/drug/ndc.json?search=package_ndc.exact:"${formatted}"&limit=10`
   const response = await fetcher(url)
+
+  if (response.status === 404) {
+    return []
+  }
 
   if (!response.ok) {
     throw new Error(`FDA NDC lookup failed (${response.status})`)
