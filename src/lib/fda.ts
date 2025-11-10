@@ -13,6 +13,8 @@ interface PackagingEntry {
 interface OpenFdaResult {
   product_ndc?: string
   labeler_name?: string
+  generic_name?: string
+  brand_name?: string
   marketing_end_date?: string
   packaging?: PackagingEntry[]
 }
@@ -96,7 +98,8 @@ function collectPackages(data: OpenFdaResponse, fallbackPlainNdc?: string): NdcP
         inactive,
         description,
         labelerName: labeler,
-        packageDescription: description
+        packageDescription: description,
+        productName: result.generic_name ?? result.brand_name
       })
     }
   }

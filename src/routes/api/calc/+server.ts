@@ -27,6 +27,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 
     let packages
     let lookupType: 'ndc' | 'rxnorm' = 'rxnorm'
+    let lookupName: string | undefined
 
     if (looksLikeNdc(drug)) {
       let ndc11: string
@@ -39,6 +40,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       try {
         packages = await getNdcPackagesByPlainNdc(ndc11, fetch)
         lookupType = 'ndc'
+        lookupName = packages?.[0]?.productName ?? packages?.[0]?.description ?? packages?.[0]?.labelerName
         if (packages.length === 0) {
           warnings.push(`No FDA packages found for NDC ${ndc11}.`)
         }
@@ -65,6 +67,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 
       try {
         packages = await getNdcPackagesByRxcui(rxnormResult.rxcui, fetch)
+        lookupName = rxnormResult.name ?? packages?.[0]?.productName ?? packages?.[0]?.description
         if (packages.length === 0) {
           warnings.push(`No FDA packages found for RxCUI ${rxnormResult.rxcui}.`)
         }
@@ -98,12 +101,14 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       ...calc,
       warnings,
       parsedSig: sigResult.parsed,
+      drugName: lookupName ?? drug,
       json: buildResultJson({
         drug,
         days,
         sig,
         lookupType,
-        calc
+        calc,
+        drugName: lookupName ?? drug
       })
     }
 
@@ -119,16 +124,19 @@ function buildResultJson({
   days,
   sig,
   lookupType,
-  calc
+  calc,
+  drugName
 }: {
   drug: string
   days: number
   sig: string
   lookupType: 'ndc' | 'rxnorm'
   calc: Pick<CalcResult, 'ndcs' | 'totalQty' | 'dispensedQty' | 'overfillPct'>
+  drugName: string
 }): string {
   const payload = {
     input: { drug, sig, days, lookupType },
+    drugName,
     totalQuantity: calc.totalQty,
     dispensedQuantity: calc.dispensedQty,
     overfillPercent: Number((calc.overfillPct * 100).toFixed(2)),

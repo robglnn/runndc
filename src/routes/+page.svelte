@@ -77,6 +77,7 @@
 
   $: warnings = result?.warnings ?? []
   $: recommended = result?.ndcs?.[0]
+  $: drugLabel = result?.drugName ?? null
   $: totalQtyDisplay = result ? formatNumber(result.totalQty) : ''
   $: overfillPercent = result ? (result.overfillPct * 100).toFixed(2) : ''
 
@@ -239,6 +240,11 @@
   <div class="space-y-10">
     <header class="space-y-3">
       <h2 class="text-3xl font-semibold text-neutral-900">Results</h2>
+      {#if drugLabel}
+        <p class="text-lg font-medium text-neutral-800">
+          Drug: <span class="text-amber-700">{drugLabel}</span>
+        </p>
+      {/if}
       <p class="text-neutral-600">
         Recommended NDC packages, calculated quantities, and structured output for your claim or pharmacy
         system.

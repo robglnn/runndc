@@ -13,6 +13,7 @@ export interface NdcPackage {
   description: string
   labelerName?: string
   packageDescription?: string
+  productName?: string
 }
 
 export interface ParsedSig {
@@ -39,6 +40,7 @@ export interface CalcResult {
   warnings: string[]
   json: string
   parsedSig?: ParsedSig
+  drugName?: string
 }
 
 export interface OverageGuidance {

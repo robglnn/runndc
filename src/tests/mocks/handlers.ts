@@ -47,6 +47,7 @@ export const handlers = [
           {
             product_ndc: '12345-6789',
             labeler_name: 'Function Health Labs',
+            generic_name: 'Lasix 40 mg tablet',
             packaging: [
               {
                 package_ndc: '12345-6789-01',
@@ -76,6 +77,7 @@ export const handlers = [
           {
             product_ndc: '55555-010',
             labeler_name: 'Found Health',
+            generic_name: 'Ibuprofen 200 mg tablet',
             packaging: [
               {
                 package_ndc: '55555-010-30',
@@ -93,6 +95,7 @@ export const handlers = [
           {
             product_ndc: '77777-123',
             labeler_name: 'Demo Labs',
+            generic_name: 'Demo Drug 100 mg',
             packaging: [
               {
                 package_ndc: '77777-123-01',
