@@ -290,6 +290,24 @@
                 {recommended.inactive ? 'Yes' : 'No'})
               </p>
             </div>
+            {#if result.aiSuggestion}
+              <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-neutral-800">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <div class="font-semibold text-amber-700">AI suggestion</div>
+                    <p class="mt-1 leading-relaxed">{result.aiSuggestion.rationale}</p>
+                  </div>
+                  {#if result.aiSuggestion.confidence !== undefined}
+                    <span class="rounded-full bg-white px-2 py-1 text-xs font-semibold text-amber-700">
+                      Confidence {(result.aiSuggestion.confidence * 100).toFixed(0)}%
+                    </span>
+                  {/if}
+                </div>
+                <p class="mt-2 text-xs text-neutral-600">
+                  Verify before dispensing. Suggested product NDC: {result.aiSuggestion.productNdc}
+                </p>
+              </div>
+            {/if}
           {:else}
             <p class="mt-4 text-sm text-neutral-600">
               No packages matched this calculation. Verify RxCUI or NDC input.

@@ -5,9 +5,12 @@ import { getRxCui } from '$lib/rxnorm'
 import { getNdcPackagesByPlainNdc, getNdcPackagesByRxcui } from '$lib/fda'
 import type { FdaIssue } from '$lib/fda'
 import { buildCalcResult } from '$lib/quantity'
-import { looksLikeNdc, normalizeNdc } from '$lib/ndcUtils'
+import { formatNdc11, looksLikeNdc, normalizeNdc } from '$lib/ndcUtils'
 import { parseSig } from '$lib/sigParser'
-import type { CalcRequest, CalcResult, UnparsedPackage } from '$lib/types'
+import type { CalcRequest, CalcResult, NdcPackage, UnparsedPackage } from '$lib/types'
+import { suggestNdcViaAi } from '$lib/ai/ndcSuggestion'
+import type { AiSuggestionResult } from '$lib/ai/ndcSuggestion'
+import { parsePackageDescription } from '$lib/packageParser'
 
 export const POST: RequestHandler = async ({ request, fetch }) => {
   try {
@@ -29,8 +32,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
     let packages
     let fdaIssues: FdaIssue[] = []
     let unparsedPackages: UnparsedPackage[] = []
-    let lookupType: 'ndc' | 'rxnorm' = 'rxnorm'
+    let lookupType: 'ndc' | 'rxnorm' | 'ai' = 'rxnorm'
     let lookupName: string | undefined
+    let aiSuggestion: CalcResult['aiSuggestion'] | null = null
 
     if (looksLikeNdc(drug)) {
       let ndc11: string
@@ -82,6 +86,41 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       }
     }
 
+    if (!packages || packages.length === 0) {
+      const aiResult = await suggestNdcViaAi({ drug, sig, days })
+      if (aiResult) {
+        aiSuggestion = {
+          productNdc: aiResult.product.productNdc,
+          rationale: aiResult.rationale,
+          confidence: aiResult.confidence
+        }
+
+        const converted = convertAiPackages(aiResult.product)
+        if (converted.packages.length > 0) {
+          packages = converted.packages
+          lookupType = 'ai'
+          lookupName =
+            lookupName ??
+            aiResult.product.genericName ??
+            aiResult.product.brandName ??
+            aiResult.product.productNdc
+          warnings.push(
+            `AI suggested product ${aiResult.product.productNdc}. ${aiResult.rationale}`
+          )
+          if (converted.issues.length) {
+            fdaIssues = [...fdaIssues, ...converted.issues]
+          }
+          if (converted.unparsed.length) {
+            unparsedPackages = [...unparsedPackages, ...converted.unparsed]
+          }
+        } else {
+          warnings.push(
+            `AI suggested product ${aiResult.product.productNdc} but its packages could not be parsed. ${aiResult.rationale}`
+          )
+        }
+      }
+    }
+
     const sigResult = await parseSig(sig, openai ?? undefined)
     warnings.push(...sigResult.warnings)
 
@@ -118,6 +157,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       parsedSig: sigResult.parsed,
       drugName: lookupName ?? drug,
       unparsedPackages,
+      aiSuggestion: aiSuggestion ?? undefined,
       json: buildResultJson({
         drug,
         days,
@@ -125,7 +165,8 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
         lookupType,
         calc: calcResult,
         drugName: lookupName ?? drug,
-        unparsedPackages
+        unparsedPackages,
+        aiSuggestion: aiSuggestion ?? undefined
       })
     }
 
@@ -143,15 +184,17 @@ function buildResultJson({
   lookupType,
   calc,
   drugName,
-  unparsedPackages
+  unparsedPackages,
+  aiSuggestion
 }: {
   drug: string
   days: number
   sig: string
-  lookupType: 'ndc' | 'rxnorm'
+  lookupType: 'ndc' | 'rxnorm' | 'ai'
   calc: Pick<CalcResult, 'ndcs' | 'totalQty' | 'dispensedQty' | 'overfillPct'>
   drugName: string
   unparsedPackages: UnparsedPackage[]
+  aiSuggestion?: CalcResult['aiSuggestion']
 }): string {
   const payload = {
     input: { drug, sig, days, lookupType },
@@ -169,9 +212,78 @@ function buildResultJson({
       inactive: ndc.inactive
     })),
     unparsedPackages,
+    aiSuggestion,
     generatedAt: new Date().toISOString()
   }
 
   return JSON.stringify(payload, null, 2)
+}
+
+function convertAiPackages(product: AiSuggestionResult['product']) {
+  const packages: NdcPackage[] = []
+  const unparsed: UnparsedPackage[] = []
+  const issues: FdaIssue[] = []
+  const today = new Date()
+
+  for (const pkg of product.packages) {
+    let normalized: string
+    try {
+      normalized = normalizeNdc(pkg.ndc)
+    } catch {
+      continue
+    }
+
+    const formatted = formatNdc11(normalized)
+    const description = pkg.description ?? ''
+    const sizeInfo = parsePackageDescription(description)
+
+    if (!sizeInfo) {
+      const rawUnitMatch = description.match(/(\d+(?:\.\d+)?)\s*([A-Za-z\[\]\-]+)/i)
+      issues.push({
+        type: 'unsupported_unit',
+        ndc: formatted,
+        description,
+        unit: rawUnitMatch?.[2]
+      })
+      unparsed.push({
+        ndc: formatted,
+        description,
+        labelerName: product.labelerName ?? undefined,
+        productName: product.genericName ?? product.brandName ?? undefined
+      })
+      continue
+    }
+
+    const inactive = isInactive(
+      product.marketingEndDate ?? undefined,
+      pkg.marketingEndDate ?? undefined,
+      today
+    )
+
+    packages.push({
+      ndc: normalized,
+      formattedNdc: formatted,
+      size: sizeInfo.size,
+      unit: sizeInfo.unit,
+      inactive,
+      description,
+      labelerName: product.labelerName ?? undefined,
+      packageDescription: description,
+      productName: product.genericName ?? product.brandName ?? undefined
+    })
+  }
+
+  return { packages, unparsed, issues }
+}
+
+function isInactive(productEnd: string | undefined, pkgEnd: string | undefined, today: Date): boolean {
+  return (productEnd ? isBeforeDate(productEnd, today) : false) || (pkgEnd ? isBeforeDate(pkgEnd, today) : false)
+}
+
+function isBeforeDate(dateString: string, today: Date): boolean {
+  const parts = dateString.split('-')
+  if (parts.length !== 3) return false
+  const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+  return !Number.isNaN(date.valueOf()) && date < today
 }
 

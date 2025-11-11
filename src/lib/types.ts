@@ -49,6 +49,11 @@ export interface CalcResult {
   parsedSig?: ParsedSig
   drugName?: string
   unparsedPackages?: UnparsedPackage[]
+  aiSuggestion?: {
+    productNdc: string
+    rationale: string
+    confidence?: number
+  }
 }
 
 export interface OverageGuidance {

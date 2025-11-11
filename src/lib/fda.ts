@@ -1,5 +1,6 @@
 import { formatNdc11, normalizeNdc } from './ndcUtils'
 import type { NdcPackage, UnparsedPackage } from './types'
+import { parsePackageDescription } from '$lib/packageParser'
 
 interface PackagingEntry {
   package_ndc?: string
@@ -135,7 +136,7 @@ function collectPackages(
 
       const formatted = formatNdc11(normalized)
       const description = entry.description ?? ''
-      const sizeInfo = parsePackageSize(entry)
+      const sizeInfo = parsePackageDescription(description)
       if (!sizeInfo) {
         issues.push({
           type: 'unsupported_unit',
@@ -178,89 +179,6 @@ function collectPackages(
   }
 
   return [...seen.values()].sort((a, b) => a.size - b.size)
-}
-
-function parsePackageSize(entry: PackagingEntry): { size: number; unit: string } | null {
-  const description = entry.description ?? ''
-  const matches = [...description.matchAll(/(\d+(?:\.\d+)?)\s*([A-Za-z\[\]\-]+)/gi)]
-
-  for (const match of matches) {
-    const size = Number(match[1])
-    const normalizedUnit = normalizeUnit(match[2])
-    if (!Number.isNaN(size) && normalizedUnit) {
-      return { size, unit: normalizedUnit }
-    }
-  }
-
-  if (typeof entry.count === 'number') {
-    return { size: entry.count, unit: 'unit' }
-  }
-
-  if (typeof entry.count === 'string' && entry.count.trim().length > 0) {
-    const value = Number(entry.count)
-    if (!Number.isNaN(value)) {
-      return { size: value, unit: 'unit' }
-    }
-  }
-
-  return null
-}
-
-function normalizeUnit(raw: string): string | null {
-  const value = raw.toLowerCase()
-  const unitMap: Record<string, string> = {
-    tablet: 'tablet',
-    tablets: 'tablet',
-    tab: 'tablet',
-    tabs: 'tablet',
-    capsule: 'capsule',
-    capsules: 'capsule',
-    cap: 'capsule',
-    caps: 'capsule',
-    ml: 'ml',
-    milliliter: 'ml',
-    milliliters: 'ml',
-    millilitre: 'ml',
-    millilitres: 'ml',
-    vial: 'vial',
-    vials: 'vial',
-    patch: 'patch',
-    patches: 'patch',
-    unit: 'unit',
-    units: 'unit',
-    each: 'each',
-    dose: 'dose',
-    doses: 'dose',
-    syringe: 'syringe',
-    syringes: 'syringe',
-    kit: 'kit',
-    kits: 'kit',
-    puff: 'puff',
-    puffs: 'puff',
-    actuation: 'puff',
-    actuations: 'puff',
-    spray: 'puff',
-    sprays: 'puff',
-    inhalation: 'inhalation',
-    inhalations: 'inhalation',
-    g: 'g',
-    gram: 'g',
-    grams: 'g',
-    mg: 'mg',
-    milligram: 'mg',
-    milligrams: 'mg',
-    mcg: 'mcg',
-    microgram: 'mcg',
-    micrograms: 'mcg',
-    l: 'liter',
-    liter: 'liter',
-    liters: 'liter',
-    litre: 'liter',
-    litres: 'liter',
-    cc: 'ml'
-  }
-
-  return unitMap[value] ?? null
 }
 
 function isBeforeToday(dateString: string, today: Date): boolean {
