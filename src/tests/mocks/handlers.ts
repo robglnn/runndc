@@ -21,12 +21,24 @@ export const handlers = [
       })
     }
 
+    if (name.includes('albuterol sulfate') && !name.includes('inhaler')) {
+      return HttpResponse.json({
+        idGroup: { rxnormId: ['99999'], name: 'Albuterol Sulfate' }
+      })
+    }
+
     return HttpResponse.json({ idGroup: {} })
   }),
 
   http.get('https://rxnav.nlm.nih.gov/REST/rxcui/:id/property.json', ({ params }) => {
     const id = params.id as string
     if (id === '12345' || id === '55555') {
+      return HttpResponse.json({
+        propConcept: { propValue: 'IN' }
+      })
+    }
+
+    if (id === '99999') {
       return HttpResponse.json({
         propConcept: { propValue: 'IN' }
       })
@@ -82,6 +94,24 @@ export const handlers = [
               {
                 package_ndc: '55555-010-30',
                 description: 'Carton of 30 tablet'
+              }
+            ]
+          }
+        ]
+      })
+    }
+
+    if (search.includes('rxcui.exact:99999')) {
+      return HttpResponse.json({
+        results: [
+          {
+            product_ndc: '99999-100',
+            labeler_name: 'Hikma Pharmaceuticals USA Inc.',
+            generic_name: 'Albuterol Sulfate',
+            packaging: [
+              {
+                package_ndc: '0054-0742-01',
+                description: 'Inhaler delivering 200 actuations'
               }
             ]
           }

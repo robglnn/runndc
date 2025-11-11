@@ -27,6 +27,23 @@ describe('api/calc', () => {
     expect(Array.isArray(payload.data.warnings)).toBe(true)
   })
 
+  it('handles variant drug names (inhaler case)', async () => {
+    const response = await POST({
+      request: makeRequest({
+        drug: 'Albuterol sulfate inhaler',
+        sig: 'Inhale 2 puffs every 6 hours as needed',
+        days: 30
+      }),
+      fetch
+    } as unknown as Parameters<typeof POST>[0])
+
+    expect(response.status).toBe(200)
+    const payload = (await response.json()) as any
+    expect(payload.success).toBe(true)
+    expect(payload.data.ndcs.length).toBeGreaterThan(0)
+    expect(payload.data.drugName?.toLowerCase()).toContain('albuterol')
+  })
+
   it('handles direct NDC input flow', async () => {
     const response = await POST({
       request: makeRequest({ drug: '77777-123-01', sig: '1 tablet daily', days: 30 }),

@@ -117,7 +117,9 @@ function collectPackages(data: OpenFdaResponse, fallbackPlainNdc?: string): NdcP
 function parsePackageSize(entry: PackagingEntry): { size: number; unit: string } | null {
   const description = entry.description ?? ''
 
-  const countMatch = description.match(/(\d+(?:\.\d+)?)\s*(tablet|tab|capsule|cap|ml|milliliter|vial|patch|unit|each|dose|syringe|kit)s?/i)
+  const countMatch = description.match(
+    /(\d+(?:\.\d+)?)\s*(tablet|tab|capsule|cap|ml|milliliter|vial|patch|unit|each|dose|syringe|kit|puff|actuation|spray|inhalation)s?/i
+  )
   if (countMatch) {
     return { size: Number(countMatch[1]), unit: normalizeUnit(countMatch[2]) }
   }
@@ -145,6 +147,8 @@ function normalizeUnit(raw: string): string {
   if (value.startsWith('vial')) return 'vial'
   if (value.startsWith('syringe')) return 'syringe'
   if (value.startsWith('kit')) return 'kit'
+  if (value.startsWith('puff') || value.startsWith('actuation') || value.startsWith('spray')) return 'puff'
+  if (value.startsWith('inhalation')) return 'inhalation'
   return 'unit'
 }
 

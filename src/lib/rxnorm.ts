@@ -94,6 +94,12 @@ async function attemptSuggestion(
   fetcher: typeof fetch,
   openai?: OpenAI
 ): Promise<LookupResult> {
+  const variant = await tryVariantLookups(drug, warnings, fetcher)
+  if (variant) {
+    cache.set(drug.toLowerCase(), variant)
+    return variant
+  }
+
   if (!openai) {
     warnings.push('No RxNorm match. Provide a different drug term or include NDC.')
     return { rxcui: null, warnings }
@@ -149,6 +155,75 @@ async function suggestAlternative(drug: string, openai: OpenAI): Promise<string 
   }
 }
 
+async function tryVariantLookups(
+  drug: string,
+  warnings: string[],
+  fetcher: typeof fetch
+): Promise<LookupResult | null> {
+  const normalized = drug.replace(/\s+/g, ' ').trim()
+  const variants = deriveVariants(normalized)
+
+  for (const variant of variants) {
+    if (!variant || variant.toLowerCase() === normalized.toLowerCase()) continue
+    const url = `https://rxnav.nlm.nih.gov/REST/rxcui.json?name=${encodeURIComponent(variant)}&search=1`
+    try {
+      const response = await fetcher(url)
+      if (!response.ok) continue
+      const data = (await response.json()) as RxNormResponse
+      const ids = data.idGroup?.rxnormId ?? []
+      if (ids.length === 0) continue
+
+      const preferred = await pickPreferredRxcui(ids, fetcher)
+      warnings.push(`Resolved via variant "${variant}".`)
+      return { rxcui: preferred ?? ids[0], name: data.idGroup?.name, warnings }
+    } catch {
+      continue
+    }
+  }
+
+  return null
+}
+
+function deriveVariants(drug: string): Set<string> {
+  const variants = new Set<string>()
+  variants.add(drug)
+
+  // Lowercase to standardize
+  const lower = drug.toLowerCase()
+
+  // Remove dosage forms / descriptors
+  const withoutForm = lower
+    .replace(
+      /\b(extended release|extended\-release|xr|sr|er|tablet|tablets|tab|tabs|capsule|capsules|cap|caps|inhaler|inhalation|aerosol|spray|solution|suspension|elixir|oral|prn)\b/g,
+      ''
+    )
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (withoutForm) variants.add(withoutForm)
+
+  // Remove strength descriptors (mg, mcg, ug, etc.)
+  const withoutStrength = withoutForm
+    .replace(/\b(\d+(\.\d+)?)(\s*)(mg|mcg|µg|ug|g|ml|mL|units?)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (withoutStrength) variants.add(withoutStrength)
+
+  // Remove brand suffix like HFA, HCl
+  const withoutSuffix = withoutStrength
+    .replace(/\b(hfa|hcl|hbr|fumarate|tartrate|phosphate)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (withoutSuffix) variants.add(withoutSuffix)
+
+  // Add tokens before commas or parentheses
+  const comma = withoutSuffix.split(',')[0]?.trim()
+  if (comma) variants.add(comma)
+
+  const paren = withoutSuffix.split('(')[0]?.trim()
+  if (paren) variants.add(paren)
+
+  return variants
+}
 function extractMessageText(
   content: string | Array<{ type?: string; text?: string }> | null | undefined
 ): string {
