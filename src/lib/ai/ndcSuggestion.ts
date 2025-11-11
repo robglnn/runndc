@@ -49,11 +49,22 @@ export async function suggestNdcViaAi(params: {
 
     if (client) {
       const selection = await pickBestCandidate(client, parsed, candidates.slice(0, 6))
-      if (!selection?.productNdc) {
-        return null
+      if (selection?.productNdc) {
+        const match = candidates.find(
+          (candidate) => candidate.item.productNdc === selection.productNdc
+        )
+        if (match) {
+          return {
+            product: match.item,
+            packages: match.item.packages,
+            rationale: selection.rationale ?? 'AI-selected NDC based on text similarity',
+            confidence: selection.confidence,
+            model: selection.model
+          }
+        }
       }
-
-      const match = candidates.find((candidate) => candidate.item.productNdc === selection.productNdc)
+      // fall back to deterministic pick if LLM did not pick a match
+      const match = candidates[0]
       if (!match) {
         return null
       }
@@ -61,9 +72,9 @@ export async function suggestNdcViaAi(params: {
       return {
         product: match.item,
         packages: match.item.packages,
-        rationale: selection.rationale ?? 'AI-selected NDC based on text similarity',
-        confidence: selection.confidence,
-        model: selection.model
+        rationale: 'Matched local NDC index via keyword scoring (LLM fallback).',
+        confidence: undefined,
+        model: selection?.model ?? 'fallback-local'
       }
     }
 
