@@ -1,7 +1,7 @@
 ## Active Context
 
 - Live MVP is deployed at `https://runndc.vercel.app/` with Function Health–style UI, `/api/calc` pipeline (RxNorm + FDA integration, SIG parsing, quantity/overfill logic), demo presets, and JSON output.
-- Recent enhancements: local openFDA dataset (135k NDCs) + AI fallback to suggest NDCs when live FDA queries fail, 4-4 product fallback, package list display, drug name surfacing, warnings for non-standard units/inactive packages, variant RxNorm lookups (e.g., inhalers), unparsed package surfaced for manual review, and guardrails around FDA/RxNorm/AI parsing so production never 500s.
+- Recent enhancements: local openFDA dataset (135k NDCs) + AI fallback to suggest NDCs when live FDA queries fail (now works even without OpenAI by using deterministic scoring), 4-4 product fallback, package list display, drug name surfacing, warnings for non-standard units/inactive packages, variant RxNorm lookups (e.g., inhalers), unparsed package surfaced for manual review, and guardrails around FDA/RxNorm/AI parsing so production never 500s.
 
 ### Immediate Next Steps
 1. Run full smoke tests on production (5 synthetic scenarios + spot checks with active/inactive NDCs).
