@@ -46,7 +46,7 @@ export async function getRxCui(
       return result
     }
 
-    const data = (await response.json()) as RxNormResponse
+    const data = await parseRxnormJson<RxNormResponse>(response, url)
     const ids = data.idGroup?.rxnormId ?? []
     const name = data.idGroup?.name
 
@@ -71,11 +71,10 @@ export async function getRxCui(
 async function pickPreferredRxcui(ids: string[], fetcher: typeof fetch): Promise<string | null> {
   for (const id of ids) {
     try {
-      const res = await fetcher(
-        `https://rxnav.nlm.nih.gov/REST/rxcui/${id}/property.json?propName=TTY`
-      )
+      const url = `https://rxnav.nlm.nih.gov/REST/rxcui/${id}/property.json?propName=TTY`
+      const res = await fetcher(url)
       if (!res.ok) continue
-      const data = (await res.json()) as PropertyResponse
+      const data = await parseRxnormJson<PropertyResponse>(res, url)
       const tty = data.propConcept?.propValue
       if (tty?.toUpperCase() === 'IN') {
         return id
@@ -169,7 +168,7 @@ async function tryVariantLookups(
     try {
       const response = await fetcher(url)
       if (!response.ok) continue
-      const data = (await response.json()) as RxNormResponse
+      const data = await parseRxnormJson<RxNormResponse>(response, url)
       const ids = data.idGroup?.rxnormId ?? []
       if (ids.length === 0) continue
 
@@ -182,6 +181,16 @@ async function tryVariantLookups(
   }
 
   return null
+}
+
+async function parseRxnormJson<T>(response: Response, url: string): Promise<T> {
+  const text = await response.text()
+  try {
+    return JSON.parse(text) as T
+  } catch (error) {
+    console.error(`Failed to parse RxNorm response from ${url}:`, text.slice(0, 200))
+    throw new Error('RxNorm response was not valid JSON')
+  }
 }
 
 function deriveVariants(drug: string): Set<string> {

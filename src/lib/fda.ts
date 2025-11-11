@@ -57,7 +57,7 @@ export async function getNdcPackagesByRxcui(
     throw new Error(`FDA NDC lookup failed (${response.status})`)
   }
 
-  const data = (await response.json()) as OpenFdaResponse
+  const data = await parseJsonResponse(response, url)
   const packages = collectPackages(data, undefined, issues, unparsed)
   if (packages.length === 0 && issues.every((issue) => issue.type !== 'no_packages')) {
     issues.push({ type: 'no_packages' })
@@ -87,7 +87,7 @@ export async function getNdcPackagesByPlainNdc(
         throw new Error(`FDA NDC lookup failed (${productResponse.status})`)
       }
 
-      const productData = (await productResponse.json()) as OpenFdaResponse
+      const productData = await parseJsonResponse(productResponse, productUrl)
       const packages = collectPackages(productData, ndc11, issues, unparsed)
       if (packages.length > 0) {
         return { packages, issues, unparsedPackages: unparsed }
@@ -102,7 +102,7 @@ export async function getNdcPackagesByPlainNdc(
     throw new Error(`FDA NDC lookup failed (${response.status})`)
   }
 
-  const data = (await response.json()) as OpenFdaResponse
+  const data = await parseJsonResponse(response, packageUrl)
   const packages = collectPackages(data, ndc11, issues, unparsed)
   if (packages.length === 0 && issues.every((issue) => issue.type !== 'no_packages')) {
     issues.push({ type: 'no_packages' })
@@ -192,6 +192,16 @@ function extractRawUnit(description?: string): string | undefined {
   if (!description) return undefined
   const match = description.match(/(\d+(?:\.\d+)?)\s*([A-Za-z\[\]\-]+)/i)
   return match?.[2]
+}
+
+async function parseJsonResponse(response: Response, url: string): Promise<OpenFdaResponse> {
+  const text = await response.text()
+  try {
+    return JSON.parse(text) as OpenFdaResponse
+  } catch (error) {
+    console.error(`Failed to parse FDA response from ${url}:`, text.slice(0, 200))
+    throw new Error('FDA response was not valid JSON')
+  }
 }
 
 function buildProductCodes(formattedPackageNdc: string, ndc11: string): string[] {

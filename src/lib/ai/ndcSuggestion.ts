@@ -39,31 +39,36 @@ export async function suggestNdcViaAi(params: {
   const client = getOpenAIClient()
   if (!client) return null
 
-  const index = await getLocalNdcIndex()
+  try {
+    const index = await getLocalNdcIndex()
 
-  const parsed = await parsePrescription(client, params)
-  const candidates = rankCandidates(index, params, parsed)
+    const parsed = await parsePrescription(client, params)
+    const candidates = rankCandidates(index, params, parsed)
 
-  if (!candidates.length) {
+    if (!candidates.length) {
+      return null
+    }
+
+    const selection = await pickBestCandidate(client, parsed, candidates.slice(0, 6))
+    if (!selection?.productNdc) {
     return null
   }
 
-  const selection = await pickBestCandidate(client, parsed, candidates.slice(0, 6))
-  if (!selection?.productNdc) {
-    return null
-  }
+    const match = candidates.find((candidate) => candidate.item.productNdc === selection.productNdc)
+    if (!match) {
+      return null
+    }
 
-  const match = candidates.find((candidate) => candidate.item.productNdc === selection.productNdc)
-  if (!match) {
+    return {
+      product: match.item,
+      packages: match.item.packages,
+      rationale: selection.rationale ?? 'AI-selected NDC based on text similarity',
+      confidence: selection.confidence,
+      model: selection.model
+    }
+  } catch (error) {
+    console.error('AI suggestion failed', error)
     return null
-  }
-
-  return {
-    product: match.item,
-    packages: match.item.packages,
-    rationale: selection.rationale ?? 'AI-selected NDC based on text similarity',
-    confidence: selection.confidence,
-    model: selection.model
   }
 }
 

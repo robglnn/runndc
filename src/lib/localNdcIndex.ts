@@ -75,7 +75,13 @@ function createTokens(value: string | null | undefined): string[] {
 
 async function loadIndex(): Promise<LocalNdcIndex> {
   const fileUrl = new URL('./data/ndc-index.json.gz', import.meta.url)
-  const buffer = await readFile(fileUrl)
+  let buffer: Buffer
+  try {
+    buffer = await readFile(fileUrl)
+  } catch (error) {
+    console.error('Failed to read local NDC index at', fileUrl, error)
+    throw error
+  }
   const decompressed = gunzipSync(buffer)
   const raw: RawNdcIndex = JSON.parse(decompressed.toString('utf8'))
 
