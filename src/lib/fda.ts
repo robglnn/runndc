@@ -75,25 +75,26 @@ export async function getNdcPackagesByPlainNdc(
   const response = await fetcher(packageUrl)
 
   if (response.status === 404) {
-    // Fallback: query by product NDC (first 9 digits, formatted 5-4) to discover sibling packages
-    const productPlain = ndc11.slice(0, 9)
-    const productFormatted = `${productPlain.slice(0, 5)}-${productPlain.slice(5)}`
-    const productUrl = `https://api.fda.gov/drug/ndc.json?search=product_ndc:"${productFormatted}"&limit=10`
-    const productResponse = await fetcher(productUrl)
-    if (!productResponse.ok) {
+    const productCandidates = buildProductCodes(formatted, ndc11)
+    for (const productCode of productCandidates) {
+      const productUrl = `https://api.fda.gov/drug/ndc.json?search=product_ndc:"${productCode}"&limit=10`
+      const productResponse = await fetcher(productUrl)
       if (productResponse.status === 404) {
-        issues.push({ type: 'no_packages' })
-        return { packages: [], issues, unparsedPackages: unparsed }
+        continue
       }
-      throw new Error(`FDA NDC lookup failed (${productResponse.status})`)
+      if (!productResponse.ok) {
+        throw new Error(`FDA NDC lookup failed (${productResponse.status})`)
+      }
+
+      const productData = (await productResponse.json()) as OpenFdaResponse
+      const packages = collectPackages(productData, ndc11, issues, unparsed)
+      if (packages.length > 0) {
+        return { packages, issues, unparsedPackages: unparsed }
+      }
     }
 
-    const productData = (await productResponse.json()) as OpenFdaResponse
-    const packages = collectPackages(productData, ndc11, issues, unparsed)
-    if (packages.length === 0 && issues.every((issue) => issue.type !== 'no_packages')) {
-      issues.push({ type: 'no_packages' })
-    }
-    return { packages, issues, unparsedPackages: unparsed }
+    issues.push({ type: 'no_packages' })
+    return { packages: [], issues, unparsedPackages: unparsed }
   }
 
   if (!response.ok) {
@@ -273,5 +274,28 @@ function extractRawUnit(description?: string): string | undefined {
   if (!description) return undefined
   const match = description.match(/(\d+(?:\.\d+)?)\s*([A-Za-z\[\]\-]+)/i)
   return match?.[2]
+}
+
+function buildProductCodes(formattedPackageNdc: string, ndc11: string): string[] {
+  const codes = new Set<string>()
+  const segments = formattedPackageNdc.split('-') // 5-4-2
+  if (segments.length !== 3) {
+    return [ndc11.slice(0, 9)]
+  }
+
+  const [labeler, product] = segments
+  codes.add(`${labeler}-${product}`) // 5-4 candidate
+
+  if (labeler.startsWith('0')) {
+    codes.add(`${labeler.slice(1)}-${product}`) // drop leading zero 4-4 candidate
+  }
+
+  if (product.startsWith('0')) {
+    codes.add(`${labeler}-${product.slice(1)}`)
+  }
+
+  codes.add(`${ndc11.slice(0, 4)}-${ndc11.slice(4, 8)}`)
+
+  return [...codes]
 }
 
