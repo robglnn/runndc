@@ -177,7 +177,7 @@ function rankCandidates(
   )
 
   if (tokens.size === 0 && strengthTokens.size === 0) {
-    return []
+    return simpleFallback(index, params.drug)
   }
 
   const candidates: Candidate[] = []
@@ -218,6 +218,9 @@ function rankCandidates(
   }
 
   candidates.sort((a, b) => b.score - a.score)
+  if (candidates.length === 0) {
+    return simpleFallback(index, params.drug)
+  }
   return candidates.slice(0, 100)
 }
 
@@ -311,5 +314,21 @@ function guessDosageForm(tokens: string[]): string | undefined {
     }
   }
   return undefined
+}
+
+function simpleFallback(index: LocalNdcIndex, rawDrug: string): Candidate[] {
+  const needle = rawDrug.toLowerCase().replace(/\s+/g, ' ').trim()
+  if (!needle) return []
+
+  const candidates: Candidate[] = []
+  for (const item of index.items) {
+    const haystack = `${item.genericName ?? ''} ${item.brandName ?? ''}`.toLowerCase()
+    if (haystack.includes(needle.split(' ')[0])) {
+      const score = haystack.includes(needle) ? 100 : 10
+      candidates.push({ item, score })
+    }
+  }
+
+  return candidates.sort((a, b) => b.score - a.score).slice(0, 100)
 }
 
