@@ -36,35 +36,50 @@ export async function suggestNdcViaAi(params: {
   sig?: string
   days?: number
 }): Promise<AiSuggestionResult | null> {
-  const client = getOpenAIClient()
-  if (!client) return null
-
   try {
+    const client = getOpenAIClient()
     const index = await getLocalNdcIndex()
 
-    const parsed = await parsePrescription(client, params)
+    const parsed = client ? await parsePrescription(client, params) : fallbackParse(params)
     const candidates = rankCandidates(index, params, parsed)
 
     if (!candidates.length) {
       return null
     }
 
-    const selection = await pickBestCandidate(client, parsed, candidates.slice(0, 6))
-    if (!selection?.productNdc) {
-    return null
-  }
+    if (client) {
+      const selection = await pickBestCandidate(client, parsed, candidates.slice(0, 6))
+      if (!selection?.productNdc) {
+        return null
+      }
 
-    const match = candidates.find((candidate) => candidate.item.productNdc === selection.productNdc)
-    if (!match) {
-      return null
+      const match = candidates.find((candidate) => candidate.item.productNdc === selection.productNdc)
+      if (!match) {
+        return null
+      }
+
+      return {
+        product: match.item,
+        packages: match.item.packages,
+        rationale: selection.rationale ?? 'AI-selected NDC based on text similarity',
+        confidence: selection.confidence,
+        model: selection.model
+      }
     }
 
+    // Fallback: pick highest score deterministically
+    const match = candidates[0]
+    if (!match) return null
+
+    const matchedTokens = Array.from(
+      new Set(match.item.searchTokens.filter((token) => token.length > 2).slice(0, 5))
+    )
     return {
       product: match.item,
       packages: match.item.packages,
-      rationale: selection.rationale ?? 'AI-selected NDC based on text similarity',
-      confidence: selection.confidence,
-      model: selection.model
+      rationale: `Matched local NDC index on tokens: ${matchedTokens.join(', ')}`,
+      confidence: undefined,
+      model: 'fallback-local'
     }
   } catch (error) {
     console.error('AI suggestion failed', error)
@@ -272,5 +287,29 @@ If none are suitable, set product_ndc to null and explain.
     console.error('Failed to parse AI selection JSON', error, raw)
     return null
   }
+}
+
+function fallbackParse(params: { drug: string; sig?: string; days?: number }): ParsedPrescription {
+  const normalizedDrug = params.drug.toLowerCase()
+  const tokens = normalizedDrug.split(/[\s,]+/).filter(Boolean)
+  const strengthTokens = tokens.filter((token) => /\d+/.test(token))
+
+  return {
+    genericName: params.drug,
+    strengthTokens,
+    dosageForm: guessDosageForm(tokens),
+    route: undefined,
+    additionalKeywords: tokens.filter((token) => token.length > 2 && !strengthTokens.includes(token))
+  }
+}
+
+function guessDosageForm(tokens: string[]): string | undefined {
+  const forms = ['tablet', 'tab', 'capsule', 'cap', 'solution', 'suspension', 'inhaler', 'patch']
+  for (const token of tokens) {
+    if (forms.includes(token)) {
+      return token
+    }
+  }
+  return undefined
 }
 
