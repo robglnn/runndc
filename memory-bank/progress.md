@@ -9,5 +9,6 @@
 - Documented deployment instructions (GitHub → Vercel import, env var setup, production deploy) and updated README/Memory Bank.
 - Completed Vercel deployment with live URL + badge; README/tasks updated.
 - Added FDA fallback to product NDC (including 4-4 variants), variant RxNorm search (e.g., inhalers), package table UI, warnings for non-standard units/inactive packages, and surfaced raw FDA packages when units are unsupported.
+- Integrated local openFDA NDC index (135k records, compressed) with build script + AI-assisted fallback: when FDA lookups fail, we parse prescription text via OpenAI, score against the local dataset, let the model pick the best match, and surface rationale/confidence in the UI/warnings.
 - Pending: production smoke tests (5 scenarios + manual verification), screenshot collateral, and decision on manual package entry / supplemental FDA data.
 
