@@ -51,9 +51,10 @@ export async function getNdcPackagesByPlainNdc(
   const response = await fetcher(packageUrl)
 
   if (response.status === 404) {
-    // Fallback: query by product NDC (first 9 digits) to discover sibling packages
-    const productCode = formatted.slice(0, 9)
-    const productUrl = `https://api.fda.gov/drug/ndc.json?search=product_ndc:"${productCode}"&limit=10`
+    // Fallback: query by product NDC (first 9 digits, formatted 5-4) to discover sibling packages
+    const productPlain = ndc11.slice(0, 9)
+    const productFormatted = `${productPlain.slice(0, 5)}-${productPlain.slice(5)}`
+    const productUrl = `https://api.fda.gov/drug/ndc.json?search=product_ndc:"${productFormatted}"&limit=10`
     const productResponse = await fetcher(productUrl)
     if (!productResponse.ok) {
       if (productResponse.status === 404) {
