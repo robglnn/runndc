@@ -77,6 +77,7 @@
 
   $: warnings = result?.warnings ?? []
   $: recommended = result?.ndcs?.[0]
+  $: unparsedPackages = result?.unparsedPackages ?? []
   $: drugLabel = result?.drugName ?? null
   $: totalQtyDisplay = result ? formatNumber(result.totalQty) : ''
   $: overfillPercent = result ? (result.overfillPct * 100).toFixed(2) : ''
@@ -363,6 +364,29 @@
                     Overfill: {(ndc.overfillPct * 100).toFixed(2)}%
                   </span>
                 </div>
+              </div>
+            {/each}
+          </div>
+        </article>
+      {/if}
+
+      {#if unparsedPackages.length > 0}
+        <article class="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-neutral-800 shadow-sm">
+          <h3 class="text-lg font-semibold text-neutral-900">Unparsed FDA Packages (manual review)</h3>
+          <p class="mt-2 text-sm text-neutral-600">
+            FDA returned package data with unsupported units. Review the descriptions below or try searching by
+            drug name to locate a better fitting NDC.
+          </p>
+          <div class="mt-4 divide-y divide-amber-200 rounded-2xl border border-amber-200 bg-white">
+            {#each unparsedPackages as pkg}
+              <div class="flex flex-col gap-2 p-4">
+                <div class="text-sm font-semibold text-neutral-900">{pkg.ndc}</div>
+                <div class="text-sm text-neutral-600">{pkg.description}</div>
+                {#if pkg.labelerName}
+                  <div class="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                    {pkg.labelerName}
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>

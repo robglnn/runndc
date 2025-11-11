@@ -1,5 +1,5 @@
 import { formatNdc11, normalizeNdc } from './ndcUtils'
-import type { NdcPackage } from './types'
+import type { NdcPackage, UnparsedPackage } from './types'
 
 interface PackagingEntry {
   package_ndc?: string
@@ -23,21 +23,33 @@ interface OpenFdaResponse {
   results?: OpenFdaResult[]
 }
 
+export type FdaIssueType = 'unsupported_unit' | 'no_packages'
+
+export interface FdaIssue {
+  type: FdaIssueType
+  ndc?: string
+  unit?: string
+  description?: string
+}
+
 export interface FdaPackageResult {
   packages: NdcPackage[]
-  warnings: string[]
+  issues: FdaIssue[]
+  unparsedPackages: UnparsedPackage[]
 }
 
 export async function getNdcPackagesByRxcui(
   rxcui: string,
   fetcher: typeof fetch
 ): Promise<FdaPackageResult> {
-  const warnings: string[] = []
+  const issues: FdaIssue[] = []
+  const unparsed: UnparsedPackage[] = []
   const url = `https://api.fda.gov/drug/ndc.json?search=rxcui.exact:${encodeURIComponent(rxcui)}&limit=200`
   const response = await fetcher(url)
 
   if (response.status === 404) {
-    return { packages: [], warnings }
+    issues.push({ type: 'no_packages' })
+    return { packages: [], issues, unparsedPackages: unparsed }
   }
 
   if (!response.ok) {
@@ -45,14 +57,19 @@ export async function getNdcPackagesByRxcui(
   }
 
   const data = (await response.json()) as OpenFdaResponse
-  return { packages: collectPackages(data, undefined, warnings), warnings }
+  const packages = collectPackages(data, undefined, issues, unparsed)
+  if (packages.length === 0 && issues.every((issue) => issue.type !== 'no_packages')) {
+    issues.push({ type: 'no_packages' })
+  }
+  return { packages, issues, unparsedPackages: unparsed }
 }
 
 export async function getNdcPackagesByPlainNdc(
   ndc11: string,
   fetcher: typeof fetch
 ): Promise<FdaPackageResult> {
-  const warnings: string[] = []
+  const issues: FdaIssue[] = []
+  const unparsed: UnparsedPackage[] = []
   const formatted = formatNdc11(ndc11)
   const packageUrl = `https://api.fda.gov/drug/ndc.json?search=package_ndc.exact:"${formatted}"&limit=10`
   const response = await fetcher(packageUrl)
@@ -65,13 +82,18 @@ export async function getNdcPackagesByPlainNdc(
     const productResponse = await fetcher(productUrl)
     if (!productResponse.ok) {
       if (productResponse.status === 404) {
-        return { packages: [], warnings }
+        issues.push({ type: 'no_packages' })
+        return { packages: [], issues, unparsedPackages: unparsed }
       }
       throw new Error(`FDA NDC lookup failed (${productResponse.status})`)
     }
 
     const productData = (await productResponse.json()) as OpenFdaResponse
-    return { packages: collectPackages(productData, ndc11, warnings), warnings }
+    const packages = collectPackages(productData, ndc11, issues, unparsed)
+    if (packages.length === 0 && issues.every((issue) => issue.type !== 'no_packages')) {
+      issues.push({ type: 'no_packages' })
+    }
+    return { packages, issues, unparsedPackages: unparsed }
   }
 
   if (!response.ok) {
@@ -79,13 +101,18 @@ export async function getNdcPackagesByPlainNdc(
   }
 
   const data = (await response.json()) as OpenFdaResponse
-  return { packages: collectPackages(data, ndc11, warnings), warnings }
+  const packages = collectPackages(data, ndc11, issues, unparsed)
+  if (packages.length === 0 && issues.every((issue) => issue.type !== 'no_packages')) {
+    issues.push({ type: 'no_packages' })
+  }
+  return { packages, issues, unparsedPackages: unparsed }
 }
 
 function collectPackages(
   data: OpenFdaResponse,
-  fallbackPlainNdc?: string,
-  warnings: string[] = []
+  fallbackPlainNdc: string | undefined,
+  issues: FdaIssue[],
+  unparsedPackages: UnparsedPackage[]
 ): NdcPackage[] {
   const packages: NdcPackage[] = []
   const today = new Date()
@@ -107,11 +134,20 @@ function collectPackages(
 
       const formatted = formatNdc11(normalized)
       const description = entry.description ?? ''
-      const sizeInfo = parsePackageSize(entry, warnings)
+      const sizeInfo = parsePackageSize(entry)
       if (!sizeInfo) {
-        warnings.push(
-          `Unable to determine package size for ${packageNdc}. Description: "${description || 'N/A'}".`
-        )
+        issues.push({
+          type: 'unsupported_unit',
+          ndc: formatted,
+          unit: extractRawUnit(description),
+          description
+        })
+        unparsedPackages.push({
+          ndc: formatted,
+          description,
+          labelerName: labeler,
+          productName: result.generic_name ?? result.brand_name
+        })
         continue
       }
 
@@ -143,23 +179,16 @@ function collectPackages(
   return [...seen.values()].sort((a, b) => a.size - b.size)
 }
 
-function parsePackageSize(
-  entry: PackagingEntry,
-  warnings: string[]
-): { size: number; unit: string } | null {
+function parsePackageSize(entry: PackagingEntry): { size: number; unit: string } | null {
   const description = entry.description ?? ''
+  const matches = [...description.matchAll(/(\d+(?:\.\d+)?)\s*([A-Za-z\[\]\-]+)/gi)]
 
-  const countMatch = description.match(
-    /(\d+(?:\.\d+)?)\s*(tablet|tab|capsule|cap|ml|milliliter|vial|patch|unit|each|dose|syringe|kit|puff|actuation|spray|inhalation|\[[^\]]+\])s?/i
-  )
-  if (countMatch) {
-    const normalizedUnit = normalizeUnit(countMatch[2])
-    if (/^\[.+\]$/.test(countMatch[2])) {
-      warnings.push(
-        `Package uses non-standard unit "${countMatch[2]}"; treating as "${normalizedUnit}". Verify before dispensing.`
-      )
+  for (const match of matches) {
+    const size = Number(match[1])
+    const normalizedUnit = normalizeUnit(match[2])
+    if (!Number.isNaN(size) && normalizedUnit) {
+      return { size, unit: normalizedUnit }
     }
-    return { size: Number(countMatch[1]), unit: normalizedUnit }
   }
 
   if (typeof entry.count === 'number') {
@@ -176,19 +205,61 @@ function parsePackageSize(
   return null
 }
 
-function normalizeUnit(raw: string): string {
+function normalizeUnit(raw: string): string | null {
   const value = raw.toLowerCase()
-  if (value.startsWith('tab')) return 'tablet'
-  if (value.startsWith('cap')) return 'capsule'
-  if (value.includes('ml')) return 'ml'
-  if (value.startsWith('patch')) return 'patch'
-  if (value.startsWith('vial')) return 'vial'
-  if (value.startsWith('syringe')) return 'syringe'
-  if (value.startsWith('kit')) return 'kit'
-  if (value.startsWith('puff') || value.startsWith('actuation') || value.startsWith('spray')) return 'puff'
-  if (value.startsWith('inhalation')) return 'inhalation'
-  if (/^\[.+\]$/.test(value)) return value
-  return 'unit'
+  const unitMap: Record<string, string> = {
+    tablet: 'tablet',
+    tablets: 'tablet',
+    tab: 'tablet',
+    tabs: 'tablet',
+    capsule: 'capsule',
+    capsules: 'capsule',
+    cap: 'capsule',
+    caps: 'capsule',
+    ml: 'ml',
+    milliliter: 'ml',
+    milliliters: 'ml',
+    millilitre: 'ml',
+    millilitres: 'ml',
+    vial: 'vial',
+    vials: 'vial',
+    patch: 'patch',
+    patches: 'patch',
+    unit: 'unit',
+    units: 'unit',
+    each: 'each',
+    dose: 'dose',
+    doses: 'dose',
+    syringe: 'syringe',
+    syringes: 'syringe',
+    kit: 'kit',
+    kits: 'kit',
+    puff: 'puff',
+    puffs: 'puff',
+    actuation: 'puff',
+    actuations: 'puff',
+    spray: 'puff',
+    sprays: 'puff',
+    inhalation: 'inhalation',
+    inhalations: 'inhalation',
+    g: 'g',
+    gram: 'g',
+    grams: 'g',
+    mg: 'mg',
+    milligram: 'mg',
+    milligrams: 'mg',
+    mcg: 'mcg',
+    microgram: 'mcg',
+    micrograms: 'mcg',
+    l: 'liter',
+    liter: 'liter',
+    liters: 'liter',
+    litre: 'liter',
+    litres: 'liter',
+    cc: 'ml'
+  }
+
+  return unitMap[value] ?? null
 }
 
 function isBeforeToday(dateString: string, today: Date): boolean {
@@ -196,5 +267,11 @@ function isBeforeToday(dateString: string, today: Date): boolean {
   if (parts.length !== 3) return false
   const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
   return !Number.isNaN(date.valueOf()) && date < today
+}
+
+function extractRawUnit(description?: string): string | undefined {
+  if (!description) return undefined
+  const match = description.match(/(\d+(?:\.\d+)?)\s*([A-Za-z\[\]\-]+)/i)
+  return match?.[2]
 }
 

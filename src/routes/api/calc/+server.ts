@@ -3,10 +3,11 @@ import type { RequestHandler } from './$types'
 import { getOpenAIClient } from '$lib/openai'
 import { getRxCui } from '$lib/rxnorm'
 import { getNdcPackagesByPlainNdc, getNdcPackagesByRxcui } from '$lib/fda'
+import type { FdaIssue } from '$lib/fda'
 import { buildCalcResult } from '$lib/quantity'
 import { looksLikeNdc, normalizeNdc } from '$lib/ndcUtils'
 import { parseSig } from '$lib/sigParser'
-import type { CalcRequest, CalcResult } from '$lib/types'
+import type { CalcRequest, CalcResult, UnparsedPackage } from '$lib/types'
 
 export const POST: RequestHandler = async ({ request, fetch }) => {
   try {
@@ -26,7 +27,8 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
     const openai = getOpenAIClient()
 
     let packages
-    let fdaWarnings: string[] = []
+    let fdaIssues: FdaIssue[] = []
+    let unparsedPackages: UnparsedPackage[] = []
     let lookupType: 'ndc' | 'rxnorm' = 'rxnorm'
     let lookupName: string | undefined
 
@@ -41,12 +43,10 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       try {
         const result = await getNdcPackagesByPlainNdc(ndc11, fetch)
         packages = result.packages
-        fdaWarnings = result.warnings
+        fdaIssues = result.issues
+        unparsedPackages = result.unparsedPackages
         lookupType = 'ndc'
         lookupName = packages?.[0]?.productName ?? packages?.[0]?.description ?? packages?.[0]?.labelerName
-        if (packages.length === 0) {
-          warnings.push(`No FDA packages found for NDC ${ndc11}.`)
-        }
       } catch (error) {
         return json(
           { success: false, error: `FDA lookup failed: ${(error as Error).message}` },
@@ -71,11 +71,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       try {
         const result = await getNdcPackagesByRxcui(rxnormResult.rxcui, fetch)
         packages = result.packages
-        fdaWarnings = result.warnings
+        fdaIssues = result.issues
+        unparsedPackages = result.unparsedPackages
         lookupName = rxnormResult.name ?? packages?.[0]?.productName ?? packages?.[0]?.description
-        if (packages.length === 0) {
-          warnings.push(`No FDA packages found for RxCUI ${rxnormResult.rxcui}.`)
-        }
       } catch (error) {
         return json(
           { success: false, error: `FDA lookup failed: ${(error as Error).message}` },
@@ -94,26 +92,40 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       )
     }
 
-    const calc = buildCalcResult({
+    const calcResult = buildCalcResult({
       parsedSig: sigResult.parsed,
       days,
       packages: packages ?? []
     })
 
-    warnings.push(...fdaWarnings, ...calc.warnings)
+    const issueMessages = fdaIssues
+      .map((issue) => {
+      if (issue.type === 'unsupported_unit') {
+        const unit = issue.unit ?? 'unknown unit'
+        return `FDA returned a package (${issue.ndc ?? 'NDC'}) using unsupported unit "${unit}". Try searching by drug name or selecting a different NDC.`
+      }
+      if (issue.type === 'no_packages') {
+        return 'FDA returned no package records for this NDC/RxCUI.'
+      }
+      return null
+      })
+      .filter((message): message is string => Boolean(message))
+    warnings.push(...issueMessages, ...calcResult.warnings)
 
     const result: CalcResult = {
-      ...calc,
+      ...calcResult,
       warnings,
       parsedSig: sigResult.parsed,
       drugName: lookupName ?? drug,
+      unparsedPackages,
       json: buildResultJson({
         drug,
         days,
         sig,
         lookupType,
-        calc,
-        drugName: lookupName ?? drug
+        calc: calcResult,
+        drugName: lookupName ?? drug,
+        unparsedPackages
       })
     }
 
@@ -130,7 +142,8 @@ function buildResultJson({
   sig,
   lookupType,
   calc,
-  drugName
+  drugName,
+  unparsedPackages
 }: {
   drug: string
   days: number
@@ -138,6 +151,7 @@ function buildResultJson({
   lookupType: 'ndc' | 'rxnorm'
   calc: Pick<CalcResult, 'ndcs' | 'totalQty' | 'dispensedQty' | 'overfillPct'>
   drugName: string
+  unparsedPackages: UnparsedPackage[]
 }): string {
   const payload = {
     input: { drug, sig, days, lookupType },
@@ -154,6 +168,7 @@ function buildResultJson({
       dispensedQty: ndc.dispensedQty,
       inactive: ndc.inactive
     })),
+    unparsedPackages,
     generatedAt: new Date().toISOString()
   }
 

@@ -32,6 +32,13 @@ export interface SelectedNdc extends NdcPackage {
   overfillPct: number
 }
 
+export interface UnparsedPackage {
+  ndc: string
+  description: string
+  labelerName?: string
+  productName?: string
+}
+
 export interface CalcResult {
   ndcs: SelectedNdc[]
   totalQty: number
@@ -41,6 +48,7 @@ export interface CalcResult {
   json: string
   parsedSig?: ParsedSig
   drugName?: string
+  unparsedPackages?: UnparsedPackage[]
 }
 
 export interface OverageGuidance {

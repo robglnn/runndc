@@ -24,6 +24,7 @@ describe('api/calc', () => {
     expect(payload.data.totalQty).toBe(60)
     expect(payload.data.ndcs[0].formattedNdc).toBe('12345-6789-01')
     expect(payload.data.drugName).toContain('Lasix')
+    expect(Array.isArray(payload.data.unparsedPackages)).toBe(true)
     expect(Array.isArray(payload.data.warnings)).toBe(true)
   })
 
@@ -42,6 +43,7 @@ describe('api/calc', () => {
     expect(payload.success).toBe(true)
     expect(payload.data.ndcs.length).toBeGreaterThan(0)
     expect(payload.data.drugName?.toLowerCase()).toContain('albuterol')
+    expect(Array.isArray(payload.data.unparsedPackages)).toBe(true)
   })
 
   it('handles direct NDC input flow', async () => {
@@ -56,6 +58,7 @@ describe('api/calc', () => {
     expect(payload.data.totalQty).toBe(30)
     expect(payload.data.ndcs[0].formattedNdc).toBe('77777-0123-01')
     expect(payload.data.drugName).toContain('Demo Drug')
+    expect(Array.isArray(payload.data.unparsedPackages)).toBe(true)
   })
 })
 
