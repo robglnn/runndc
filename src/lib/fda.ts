@@ -47,11 +47,23 @@ export async function getNdcPackagesByPlainNdc(
   fetcher: typeof fetch
 ): Promise<NdcPackage[]> {
   const formatted = formatNdc11(ndc11)
-  const url = `https://api.fda.gov/drug/ndc.json?search=package_ndc.exact:"${formatted}"&limit=10`
-  const response = await fetcher(url)
+  const packageUrl = `https://api.fda.gov/drug/ndc.json?search=package_ndc.exact:"${formatted}"&limit=10`
+  const response = await fetcher(packageUrl)
 
   if (response.status === 404) {
-    return []
+    // Fallback: query by product NDC (first 9 digits) to discover sibling packages
+    const productCode = formatted.slice(0, 9)
+    const productUrl = `https://api.fda.gov/drug/ndc.json?search=product_ndc:"${productCode}"&limit=10`
+    const productResponse = await fetcher(productUrl)
+    if (!productResponse.ok) {
+      if (productResponse.status === 404) {
+        return []
+      }
+      throw new Error(`FDA NDC lookup failed (${productResponse.status})`)
+    }
+
+    const productData = (await productResponse.json()) as OpenFdaResponse
+    return collectPackages(productData, ndc11)
   }
 
   if (!response.ok) {
