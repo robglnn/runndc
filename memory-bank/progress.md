@@ -7,5 +7,6 @@
 - Implemented full `/api/calc` pipeline (RxNorm + FDA fetch, NDC normalization, SIG parsing, quantity calculator, warnings) with Function Health–style UI, demo scenarios, and structured JSON output.
 - Added global error modal/store, synthetic demo presets, and Vitest + MSW test suite covering ndc utils, quantity logic, sig parser, and API route.
 - Documented deployment instructions (GitHub → Vercel import, env var setup, production deploy) and updated README/Memory Bank.
-- Pending: user to complete Vercel import + provide live URL, then run hosted smoke tests and capture demo assets.
+- Completed Vercel deployment with live URL + badge; README/tasks updated. Added FDA fallback to product NDC, variant RxNorm search (e.g., inhalers), package table UI, and warnings for non-standard units/inactive packages.
+- Pending: production smoke tests (5 scenarios + manual verification), screenshot collateral, and decision on manual package entry / supplemental FDA data.
 
