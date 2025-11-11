@@ -26,6 +26,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
     const openai = getOpenAIClient()
 
     let packages
+    let fdaWarnings: string[] = []
     let lookupType: 'ndc' | 'rxnorm' = 'rxnorm'
     let lookupName: string | undefined
 
@@ -38,7 +39,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       }
 
       try {
-        packages = await getNdcPackagesByPlainNdc(ndc11, fetch)
+        const result = await getNdcPackagesByPlainNdc(ndc11, fetch)
+        packages = result.packages
+        fdaWarnings = result.warnings
         lookupType = 'ndc'
         lookupName = packages?.[0]?.productName ?? packages?.[0]?.description ?? packages?.[0]?.labelerName
         if (packages.length === 0) {
@@ -66,7 +69,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       }
 
       try {
-        packages = await getNdcPackagesByRxcui(rxnormResult.rxcui, fetch)
+        const result = await getNdcPackagesByRxcui(rxnormResult.rxcui, fetch)
+        packages = result.packages
+        fdaWarnings = result.warnings
         lookupName = rxnormResult.name ?? packages?.[0]?.productName ?? packages?.[0]?.description
         if (packages.length === 0) {
           warnings.push(`No FDA packages found for RxCUI ${rxnormResult.rxcui}.`)
@@ -95,7 +100,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       packages: packages ?? []
     })
 
-    warnings.push(...calc.warnings)
+    warnings.push(...fdaWarnings, ...calc.warnings)
 
     const result: CalcResult = {
       ...calc,

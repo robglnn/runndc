@@ -23,15 +23,21 @@ interface OpenFdaResponse {
   results?: OpenFdaResult[]
 }
 
+export interface FdaPackageResult {
+  packages: NdcPackage[]
+  warnings: string[]
+}
+
 export async function getNdcPackagesByRxcui(
   rxcui: string,
   fetcher: typeof fetch
-): Promise<NdcPackage[]> {
+): Promise<FdaPackageResult> {
+  const warnings: string[] = []
   const url = `https://api.fda.gov/drug/ndc.json?search=rxcui.exact:${encodeURIComponent(rxcui)}&limit=200`
   const response = await fetcher(url)
 
   if (response.status === 404) {
-    return []
+    return { packages: [], warnings }
   }
 
   if (!response.ok) {
@@ -39,13 +45,14 @@ export async function getNdcPackagesByRxcui(
   }
 
   const data = (await response.json()) as OpenFdaResponse
-  return collectPackages(data)
+  return { packages: collectPackages(data, undefined, warnings), warnings }
 }
 
 export async function getNdcPackagesByPlainNdc(
   ndc11: string,
   fetcher: typeof fetch
-): Promise<NdcPackage[]> {
+): Promise<FdaPackageResult> {
+  const warnings: string[] = []
   const formatted = formatNdc11(ndc11)
   const packageUrl = `https://api.fda.gov/drug/ndc.json?search=package_ndc.exact:"${formatted}"&limit=10`
   const response = await fetcher(packageUrl)
@@ -58,13 +65,13 @@ export async function getNdcPackagesByPlainNdc(
     const productResponse = await fetcher(productUrl)
     if (!productResponse.ok) {
       if (productResponse.status === 404) {
-        return []
+        return { packages: [], warnings }
       }
       throw new Error(`FDA NDC lookup failed (${productResponse.status})`)
     }
 
     const productData = (await productResponse.json()) as OpenFdaResponse
-    return collectPackages(productData, ndc11)
+    return { packages: collectPackages(productData, ndc11, warnings), warnings }
   }
 
   if (!response.ok) {
@@ -72,10 +79,14 @@ export async function getNdcPackagesByPlainNdc(
   }
 
   const data = (await response.json()) as OpenFdaResponse
-  return collectPackages(data, ndc11)
+  return { packages: collectPackages(data, ndc11, warnings), warnings }
 }
 
-function collectPackages(data: OpenFdaResponse, fallbackPlainNdc?: string): NdcPackage[] {
+function collectPackages(
+  data: OpenFdaResponse,
+  fallbackPlainNdc?: string,
+  warnings: string[] = []
+): NdcPackage[] {
   const packages: NdcPackage[] = []
   const today = new Date()
 
@@ -96,8 +107,13 @@ function collectPackages(data: OpenFdaResponse, fallbackPlainNdc?: string): NdcP
 
       const formatted = formatNdc11(normalized)
       const description = entry.description ?? ''
-      const sizeInfo = parsePackageSize(entry)
-      if (!sizeInfo) continue
+      const sizeInfo = parsePackageSize(entry, warnings)
+      if (!sizeInfo) {
+        warnings.push(
+          `Unable to determine package size for ${packageNdc}. Description: "${description || 'N/A'}".`
+        )
+        continue
+      }
 
       const inactive =
         productInactive ||
@@ -127,14 +143,23 @@ function collectPackages(data: OpenFdaResponse, fallbackPlainNdc?: string): NdcP
   return [...seen.values()].sort((a, b) => a.size - b.size)
 }
 
-function parsePackageSize(entry: PackagingEntry): { size: number; unit: string } | null {
+function parsePackageSize(
+  entry: PackagingEntry,
+  warnings: string[]
+): { size: number; unit: string } | null {
   const description = entry.description ?? ''
 
   const countMatch = description.match(
-    /(\d+(?:\.\d+)?)\s*(tablet|tab|capsule|cap|ml|milliliter|vial|patch|unit|each|dose|syringe|kit|puff|actuation|spray|inhalation)s?/i
+    /(\d+(?:\.\d+)?)\s*(tablet|tab|capsule|cap|ml|milliliter|vial|patch|unit|each|dose|syringe|kit|puff|actuation|spray|inhalation|\[[^\]]+\])s?/i
   )
   if (countMatch) {
-    return { size: Number(countMatch[1]), unit: normalizeUnit(countMatch[2]) }
+    const normalizedUnit = normalizeUnit(countMatch[2])
+    if (/^\[.+\]$/.test(countMatch[2])) {
+      warnings.push(
+        `Package uses non-standard unit "${countMatch[2]}"; treating as "${normalizedUnit}". Verify before dispensing.`
+      )
+    }
+    return { size: Number(countMatch[1]), unit: normalizedUnit }
   }
 
   if (typeof entry.count === 'number') {
@@ -162,6 +187,7 @@ function normalizeUnit(raw: string): string {
   if (value.startsWith('kit')) return 'kit'
   if (value.startsWith('puff') || value.startsWith('actuation') || value.startsWith('spray')) return 'puff'
   if (value.startsWith('inhalation')) return 'inhalation'
+  if (/^\[.+\]$/.test(value)) return value
   return 'unit'
 }
 
