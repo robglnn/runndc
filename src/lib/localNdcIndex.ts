@@ -1,6 +1,7 @@
 import { readFile } from 'fs/promises'
 import { gunzipSync } from 'zlib'
 import { normalizeNdc } from '$lib/ndcUtils'
+import path from 'path'
 
 interface RawNdcIndex {
   generatedAt: string
@@ -77,7 +78,12 @@ async function loadIndex(): Promise<LocalNdcIndex> {
   const fileUrl = new URL('./data/ndc-index.json.gz', import.meta.url)
   let buffer: Buffer
   try {
-    buffer = await readFile(fileUrl)
+    if (fileUrl.protocol === 'file:') {
+      buffer = await readFile(fileUrl)
+    } else {
+      const fsPath = path.resolve(process.cwd(), 'src/lib/data/ndc-index.json.gz')
+      buffer = await readFile(fsPath)
+    }
   } catch (error) {
     console.error('Failed to read local NDC index at', fileUrl, error)
     throw error

@@ -1,5 +1,7 @@
 import { formatNdc11, normalizeNdc } from './ndcUtils'
 import type { NdcPackage, UnparsedPackage } from './types'
+import { getLocalNdcIndex } from '$lib/localNdcIndex'
+import type { LocalNdcIndex, LocalNdcItem, LocalPackage } from '$lib/localNdcIndex'
 import { parsePackageDescription } from '$lib/packageParser'
 
 interface PackagingEntry {
@@ -24,7 +26,7 @@ interface OpenFdaResponse {
   results?: OpenFdaResult[]
 }
 
-export type FdaIssueType = 'unsupported_unit' | 'no_packages'
+export type FdaIssueType = 'unsupported_unit' | 'no_packages' | 'inactive'
 
 export interface FdaIssue {
   type: FdaIssueType
@@ -58,8 +60,11 @@ export async function getNdcPackagesByRxcui(
   }
 
   const data = await parseJsonResponse(response, url)
-  const packages = collectPackages(data, undefined, issues, unparsed)
+  const localIndex = await loadLocalIndexSafe()
+  const packages = collectPackages(data, undefined, issues, unparsed, localIndex)
   if (packages.length === 0 && issues.every((issue) => issue.type !== 'no_packages')) {
+    const productCode = data.results?.[0]?.product_ndc
+    await maybeAddInactiveIssueFromIndex(issues, productCode, localIndex)
     issues.push({ type: 'no_packages' })
   }
   return { packages, issues, unparsedPackages: unparsed }
@@ -74,6 +79,7 @@ export async function getNdcPackagesByPlainNdc(
   const formatted = formatNdc11(ndc11)
   const packageUrl = `https://api.fda.gov/drug/ndc.json?search=package_ndc.exact:"${formatted}"&limit=10`
   const response = await fetcher(packageUrl)
+  const localIndex = await loadLocalIndexSafe()
 
   if (response.status === 404) {
     const productCandidates = buildProductCodes(formatted, ndc11)
@@ -88,12 +94,13 @@ export async function getNdcPackagesByPlainNdc(
       }
 
       const productData = await parseJsonResponse(productResponse, productUrl)
-      const packages = collectPackages(productData, ndc11, issues, unparsed)
+      const packages = collectPackages(productData, ndc11, issues, unparsed, localIndex)
       if (packages.length > 0) {
         return { packages, issues, unparsedPackages: unparsed }
       }
     }
 
+    await maybeAddInactiveIssueFromIndex(issues, formatted, localIndex)
     issues.push({ type: 'no_packages' })
     return { packages: [], issues, unparsedPackages: unparsed }
   }
@@ -103,8 +110,9 @@ export async function getNdcPackagesByPlainNdc(
   }
 
   const data = await parseJsonResponse(response, packageUrl)
-  const packages = collectPackages(data, ndc11, issues, unparsed)
+  const packages = collectPackages(data, ndc11, issues, unparsed, localIndex)
   if (packages.length === 0 && issues.every((issue) => issue.type !== 'no_packages')) {
+    await maybeAddInactiveIssueFromIndex(issues, formatted, localIndex)
     issues.push({ type: 'no_packages' })
   }
   return { packages, issues, unparsedPackages: unparsed }
@@ -114,7 +122,8 @@ function collectPackages(
   data: OpenFdaResponse,
   fallbackPlainNdc: string | undefined,
   issues: FdaIssue[],
-  unparsedPackages: UnparsedPackage[]
+  unparsedPackages: UnparsedPackage[],
+  localIndex: LocalNdcIndex | null
 ): NdcPackage[] {
   const packages: NdcPackage[] = []
   const today = new Date()
@@ -122,6 +131,7 @@ function collectPackages(
   for (const result of data.results ?? []) {
     const labeler = result.labeler_name
     const productInactive = result.marketing_end_date ? isBeforeToday(result.marketing_end_date, today) : false
+    const localProduct = findLocalProduct(localIndex, result.product_ndc ?? fallbackPlainNdc)
 
     for (const entry of result.packaging ?? []) {
       const packageNdc = entry.package_ndc ?? result.product_ndc ?? fallbackPlainNdc
@@ -153,9 +163,14 @@ function collectPackages(
         continue
       }
 
+      const localPkg = findLocalPackage(localProduct, formatted)
+      const marketingEnd =
+        entry.marketing_end_date ??
+        (localPkg?.marketingEndDate ? normalizeDateString(localPkg.marketingEndDate) : null) ??
+        (result.marketing_end_date ? normalizeDateString(result.marketing_end_date) : null)
       const inactive =
         productInactive ||
-        (entry.marketing_end_date ? isBeforeToday(entry.marketing_end_date, today) : false)
+        (marketingEnd ? isBeforeToday(marketingEnd, today) : false)
 
       packages.push({
         ndc: normalized,
@@ -166,7 +181,8 @@ function collectPackages(
         description,
         labelerName: labeler,
         packageDescription: description,
-        productName: result.generic_name ?? result.brand_name
+        productName: result.generic_name ?? result.brand_name,
+        marketingEndDate: marketingEnd
       })
     }
   }
@@ -178,11 +194,17 @@ function collectPackages(
     }
   }
 
-  return [...seen.values()].sort((a, b) => a.size - b.size)
+  const deduped = [...seen.values()].sort((a, b) => a.size - b.size)
+  if (deduped.length > 0 && deduped.every((pkg) => pkg.inactive)) {
+    issues.push({ type: 'inactive', ndc: deduped[0].formattedNdc })
+  }
+  return deduped
 }
 
 function isBeforeToday(dateString: string, today: Date): boolean {
-  const parts = dateString.split('-')
+  const normalized = normalizeDateString(dateString)
+  if (!normalized) return false
+  const parts = normalized.split('-')
   if (parts.length !== 3) return false
   const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
   return !Number.isNaN(date.valueOf()) && date < today
@@ -225,5 +247,89 @@ function buildProductCodes(formattedPackageNdc: string, ndc11: string): string[]
   codes.add(`${ndc11.slice(0, 4)}-${ndc11.slice(4, 8)}`)
 
   return [...codes]
+}
+
+async function maybeAddInactiveIssueFromIndex(
+  issues: FdaIssue[],
+  formattedPackageNdc: string | undefined,
+  localIndex: LocalNdcIndex | null
+) {
+  try {
+    if (!formattedPackageNdc) return
+    const index = localIndex ?? (await getLocalNdcIndex())
+    const product = findLocalProduct(index, formattedPackageNdc)
+    if (!product) return
+    const today = new Date()
+    const hasActivePackage = product.packages.some((pkg) => {
+      if (!pkg.marketingEndDate) return true
+      const normalized = normalizeDateString(pkg.marketingEndDate)
+      return !(normalized && isBeforeToday(normalized, today))
+    })
+    if (!hasActivePackage) {
+      console.info('[fda] marking inactive from local index', formattedPackageNdc)
+      const latestEnd = product.packages
+        .map((pkg) => normalizeDateString(pkg.marketingEndDate ?? undefined))
+        .filter((date): date is string => Boolean(date))
+        .sort()
+        .pop()
+      issues.push({ type: 'inactive', ndc: formattedPackageNdc, description: latestEnd })
+    }
+  } catch (error) {
+    console.error('Failed to look up inactive status from local index', error)
+  }
+}
+
+async function loadLocalIndexSafe(): Promise<LocalNdcIndex | null> {
+  try {
+    return await getLocalNdcIndex()
+  } catch (error) {
+    console.error('Failed to load local NDC index', error)
+    return null
+  }
+}
+
+function findLocalProduct(
+  localIndex: LocalNdcIndex | null,
+  productCode?: string | null
+): LocalNdcItem | undefined {
+  if (!localIndex || !productCode) return undefined
+  if (productCode.includes('-')) {
+    const segments = productCode.split('-')
+    if (segments.length === 3) {
+      const candidate = `${segments[0]}-${segments[1]}`
+      const trimmedCandidate = `${segments[0]}-${segments[1].replace(/^0+/, '') || '0'}`
+      const found =
+        localIndex.productMap.get(candidate) ??
+        localIndex.productMap.get(candidate.replace(/\D/g, '')) ??
+        localIndex.productMap.get(trimmedCandidate) ??
+        localIndex.productMap.get(trimmedCandidate.replace(/\D/g, ''))
+      if (found) return found
+    }
+  }
+  const plain = productCode.replace(/\D/g, '').slice(0, 9)
+  if (!plain) return undefined
+  return (
+    localIndex.productMap.get(productCode) ??
+    localIndex.productMap.get(plain) ??
+    localIndex.productMap.get(`${plain.slice(0, 5)}-${plain.slice(5)}`)
+  )
+}
+
+function findLocalPackage(product: LocalNdcItem | undefined, formattedNdc: string): LocalPackage | undefined {
+  if (!product) return undefined
+  const plain = formattedNdc.replace(/\D/g, '')
+  return (
+    product.packages.find((pkg) => pkg.ndc === formattedNdc) ??
+    product.packages.find((pkg) => pkg.ndcPlain === plain)
+  )
+}
+
+function normalizeDateString(dateString?: string | null): string | null {
+  if (!dateString) return null
+  if (dateString.includes('-')) return dateString
+  if (dateString.length === 8) {
+    return `${dateString.slice(0, 4)}-${dateString.slice(4, 6)}-${dateString.slice(6, 8)}`
+  }
+  return dateString
 }
 

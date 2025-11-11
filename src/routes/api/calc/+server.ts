@@ -87,6 +87,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
     }
 
     if (!packages || packages.length === 0) {
+      console.info('[calc] invoking AI fallback', { drug, sig, days })
       const aiResult = await suggestNdcViaAi({ drug, sig, days })
       if (aiResult) {
         aiSuggestion = {
@@ -104,6 +105,10 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
             aiResult.product.genericName ??
             aiResult.product.brandName ??
             aiResult.product.productNdc
+          console.info('[calc] AI fallback produced packages', {
+            productNdc: aiResult.product.productNdc,
+            packageCount: packages.length
+          })
           warnings.push(
             `AI suggested product ${aiResult.product.productNdc}. ${aiResult.rationale}`
           )
@@ -112,6 +117,12 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
           }
           if (converted.unparsed.length) {
             unparsedPackages = [...unparsedPackages, ...converted.unparsed]
+          }
+          if (converted.issues.length || converted.unparsed.length) {
+            console.info('[calc] AI fallback packages had issues', {
+              issues: converted.issues,
+              unparsedCount: converted.unparsed.length
+            })
           }
         } else {
           warnings.push(
@@ -145,6 +156,13 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       }
       if (issue.type === 'no_packages') {
         return 'FDA returned no package records for this NDC/RxCUI.'
+      }
+      if (issue.type === 'inactive') {
+        const displayNdc = issue.ndc
+          ? issue.ndc.replace(/-0(\d{3})-/, '-$1-')
+          : 'NDC'
+        const expiry = issue.description ? ` (expired ${issue.description})` : ''
+        return `${displayNdc} is inactive${expiry}. Select an active package before dispensing.`
       }
       return null
       })
@@ -224,6 +242,7 @@ function convertAiPackages(product: AiSuggestionResult['product']) {
   const unparsed: UnparsedPackage[] = []
   const issues: FdaIssue[] = []
   const today = new Date()
+  let unsupportedCount = 0
 
   for (const pkg of product.packages) {
     let normalized: string
@@ -251,6 +270,7 @@ function convertAiPackages(product: AiSuggestionResult['product']) {
         labelerName: product.labelerName ?? undefined,
         productName: product.genericName ?? product.brandName ?? undefined
       })
+      unsupportedCount += 1
       continue
     }
 
@@ -272,6 +292,14 @@ function convertAiPackages(product: AiSuggestionResult['product']) {
       productName: product.genericName ?? product.brandName ?? undefined
     })
   }
+
+  console.info('[calc] convertAiPackages summary', {
+    productNdc: product.productNdc,
+    totalPackages: product.packages.length,
+    parsedCount: packages.length,
+    unsupportedCount,
+    issueCount: issues.length
+  })
 
   return { packages, unparsed, issues }
 }

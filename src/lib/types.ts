@@ -14,6 +14,7 @@ export interface NdcPackage {
   labelerName?: string
   packageDescription?: string
   productName?: string
+  marketingEndDate?: string | null
 }
 
 export interface ParsedSig {
