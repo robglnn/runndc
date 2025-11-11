@@ -12,5 +12,6 @@
 - Integrated local openFDA NDC index (135k records, compressed) with build script + AI-assisted fallback: when FDA lookups fail, we parse prescription text via OpenAI, score against the local dataset, let the model pick the best match, and surface rationale/confidence in the UI/warnings.
 - Hardened external integrations: wrap RxNorm/FDA JSON parsing with diagnostics, add logging when local index missing, and catch OpenAI failures so `/api/calc` never returns 500 on bad upstream responses.
 - Enabled deterministic fallback when OpenAI is unavailable: use local index token scoring to recommend NDCs and display rationale so production always returns guidance.
+- Flag inactive NDCs by merging marketing-end dates from the local FDA snapshot; when live FDA lookups 404 or return only expired packages we now surface an explicit inactive warning (and mark packages as inactive in the UI).
 - Pending: production smoke tests (5 scenarios + manual verification), screenshot collateral, and decision on manual package entry / supplemental FDA data.
 
