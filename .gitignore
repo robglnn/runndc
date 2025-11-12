@@ -7,3 +7,5 @@ build
 coverage
 .pnpm-store
 *.log
+
+NDCcalculator-brief.md

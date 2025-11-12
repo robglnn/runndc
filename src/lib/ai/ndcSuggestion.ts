@@ -29,7 +29,28 @@ export interface AiSuggestionResult {
   model?: string
 }
 
-const BASE_TOKENS = ['tab', 'tablet', 'capsule', 'cap', 'ml', 'mg', 'mcg', 'solution']
+const BASE_TOKENS = [
+  'tab',
+  'tabs',
+  'tablet',
+  'tablets',
+  'capsule',
+  'capsules',
+  'cap',
+  'caps',
+  'ml',
+  'mg',
+  'mcg',
+  'solution',
+  'oral',
+  'po',
+  'take',
+  'sig',
+  'daily',
+  'day',
+  'supply'
+]
+const UNIT_TOKENS = ['mg', 'mcg', 'g', 'ml', 'unit', 'units', 'meq']
 
 export async function suggestNdcViaAi(params: {
   drug: string
@@ -160,79 +181,53 @@ Days supply: "${params.days ?? ''}"
 
 function rankCandidates(
   index: LocalNdcIndex,
-  params: { drug: string },
+  params: { drug: string; sig?: string },
   parsed: ParsedPrescription
 ): Candidate[] {
-  const tokens = new Set<string>()
+  const {
+    tokens,
+    ingredientTokens,
+    numericTokens,
+    unitTokens,
+    desiredDosageForm,
+    desiredRoute
+  } = buildTokenContext(params, parsed)
 
-  const addTokens = (value?: string) => {
-    if (!value) return
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter((part) => part.length > 1 && !BASE_TOKENS.includes(part))
-      .forEach((token) => tokens.add(token))
-  }
-
-  addTokens(params.drug)
-  addTokens(parsed.genericName)
-  addTokens(parsed.brandName)
-  addTokens(parsed.dosageForm)
-  parsed.additionalKeywords.forEach((token) => addTokens(token))
-
-  const strengthTokens = new Set(
-    parsed.strengthTokens
-      .map((token) => token.toLowerCase())
-      .filter((token) => token.length > 1)
-  )
-
-  if (tokens.size === 0 && strengthTokens.size === 0) {
+  if (tokens.size === 0 && numericTokens.size === 0 && ingredientTokens.size === 0) {
     return simpleFallback(index, params.drug)
   }
 
-  const candidates: Candidate[] = []
-
-  for (const item of index.items) {
-    let score = 0
-
-    for (const token of tokens) {
-      if (item.searchTokens.includes(token)) {
-        score += 4
-      }
-    }
-
-    if (parsed.dosageForm && item.dosageForm) {
-      if (item.dosageForm.toLowerCase().includes(parsed.dosageForm.toLowerCase())) {
-        score += 3
-      }
-    }
-
-    if (parsed.route && item.route.some((route) => route.toLowerCase().includes(parsed.route!))) {
-      score += 2
-    }
-
-    if (strengthTokens.size > 0) {
-      for (const ingredient of item.activeIngredients) {
-        const strength = (ingredient.strength ?? '').toLowerCase()
-        for (const token of strengthTokens) {
-          if (strength.includes(token)) {
-            score += 2
-          }
-        }
-      }
-    }
-
-    if (score > 0) {
-      candidates.push({ item, score })
-    }
+  const strict = evaluateCandidates({
+    index,
+    tokens,
+    ingredientTokens,
+    numericTokens,
+    unitTokens,
+    desiredDosageForm,
+    desiredRoute,
+    relaxRoute: false,
+    relaxForm: false
+  })
+  if (strict.length > 0) {
+    return strict
   }
 
-  candidates.sort((a, b) => b.score - a.score)
-  if (candidates.length === 0) {
-    return simpleFallback(index, params.drug)
+  const relaxed = evaluateCandidates({
+    index,
+    tokens,
+    ingredientTokens,
+    numericTokens,
+    unitTokens,
+    desiredDosageForm,
+    desiredRoute,
+    relaxRoute: true,
+    relaxForm: true
+  })
+  if (relaxed.length > 0) {
+    return relaxed
   }
-  return candidates.slice(0, 100)
+
+  return simpleFallback(index, params.drug)
 }
 
 async function pickBestCandidate(
@@ -305,20 +300,48 @@ If none are suitable, set product_ndc to null and explain.
 
 function fallbackParse(params: { drug: string; sig?: string; days?: number }): ParsedPrescription {
   const normalizedDrug = params.drug.toLowerCase()
+  const sigTokens = params.sig?.toLowerCase().split(/[\s,]+/) ?? []
   const tokens = normalizedDrug.split(/[\s,]+/).filter(Boolean)
+  const combinedTokens = [...tokens, ...sigTokens]
   const strengthTokens = tokens.filter((token) => /\d+/.test(token))
+  const dosageForm =
+    guessDosageForm(combinedTokens) ?? guessDosageForm(tokens) ?? guessDosageForm(sigTokens)
+  const route = deriveRoute(params.sig)
 
   return {
     genericName: params.drug,
     strengthTokens,
-    dosageForm: guessDosageForm(tokens),
-    route: undefined,
-    additionalKeywords: tokens.filter((token) => token.length > 2 && !strengthTokens.includes(token))
+    dosageForm,
+    route,
+    additionalKeywords: combinedTokens.filter(
+      (token) => token.length > 2 && !strengthTokens.includes(token)
+    )
   }
 }
 
 function guessDosageForm(tokens: string[]): string | undefined {
-  const forms = ['tablet', 'tab', 'capsule', 'cap', 'solution', 'suspension', 'inhaler', 'patch']
+  const forms = [
+    'tablet',
+    'tab',
+    'tablets',
+    'capsule',
+    'cap',
+    'capsules',
+    'solution',
+    'suspension',
+    'inhaler',
+    'patch',
+    'cream',
+    'ointment',
+    'gel',
+    'spray',
+    'injection',
+    'syringe',
+    'pen',
+    'lozenge',
+    'powder',
+    'granules'
+  ]
   for (const token of tokens) {
     if (forms.includes(token)) {
       return token
@@ -341,5 +364,264 @@ function simpleFallback(index: LocalNdcIndex, rawDrug: string): Candidate[] {
   }
 
   return candidates.sort((a, b) => b.score - a.score).slice(0, 100)
+}
+
+function buildTokenContext(
+  params: { drug: string; sig?: string },
+  parsed: ParsedPrescription
+) {
+  const tokens = new Set<string>()
+  const ingredientTokens = new Set<string>()
+  const numericTokens = new Set<string>()
+  const unitTokens = new Set<string>()
+
+  const registerToken = (token: string) => {
+    if (!token) return
+    const normalized = token.toLowerCase().trim()
+    if (!normalized || normalized.length < 2) return
+    if (BASE_TOKENS.includes(normalized)) return
+    tokens.add(normalized)
+    if (/\d/.test(normalized)) {
+      numericTokens.add(normalized)
+    } else if (UNIT_TOKENS.includes(normalized)) {
+      unitTokens.add(normalized)
+    } else {
+      ingredientTokens.add(normalized)
+    }
+  }
+
+  const collect = (value?: string) => {
+    if (!value) return
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .forEach(registerToken)
+  }
+
+  collect(params.drug)
+  collect(parsed.genericName)
+  collect(parsed.brandName)
+  collect(parsed.dosageForm)
+  parsed.additionalKeywords.forEach(registerToken)
+
+  const strengthTokens = parsed.strengthTokens
+    .map((token) => token.toLowerCase())
+    .filter((token) => token.length > 0)
+  strengthTokens.forEach(registerToken)
+
+  const desiredDosageForm = canonicalDosageForm(
+    parsed.dosageForm ?? guessDosageFormFromText(params.drug, params.sig)
+  )
+  const desiredRoute = canonicalRoute(parsed.route ?? deriveRoute(params.sig))
+
+  return {
+    tokens,
+    ingredientTokens,
+    numericTokens,
+    unitTokens,
+    desiredDosageForm,
+    desiredRoute
+  }
+}
+
+function evaluateCandidates({
+  index,
+  tokens,
+  ingredientTokens,
+  numericTokens,
+  unitTokens,
+  desiredDosageForm,
+  desiredRoute,
+  relaxRoute,
+  relaxForm
+}: {
+  index: LocalNdcIndex
+  tokens: Set<string>
+  ingredientTokens: Set<string>
+  numericTokens: Set<string>
+  unitTokens: Set<string>
+  desiredDosageForm?: string
+  desiredRoute?: string
+  relaxRoute: boolean
+  relaxForm: boolean
+}): Candidate[] {
+  const candidates: Candidate[] = []
+
+  const desiredIngredients = Array.from(ingredientTokens).filter((token) => token.length > 2)
+
+  for (const item of index.items) {
+    const candidateForm = canonicalDosageForm(item.dosageForm ?? undefined)
+    const candidateRoutes = item.route.map((route) => canonicalRoute(route)).filter(Boolean) as string[]
+
+    if (!relaxForm && desiredDosageForm && candidateForm && candidateForm !== desiredDosageForm) {
+      continue
+    }
+    if (
+      !relaxRoute &&
+      desiredRoute &&
+      candidateRoutes.length > 0 &&
+      !candidateRoutes.includes(desiredRoute)
+    ) {
+      continue
+    }
+
+    if (desiredIngredients.length > 0) {
+      const ingredientNames = item.activeIngredients
+        .map((ingredient) => ingredient.name?.toLowerCase() ?? '')
+        .filter(Boolean)
+      const ingredientHit = desiredIngredients.some(
+        (token) =>
+          ingredientNames.some((name) => name.includes(token)) ||
+          item.searchTokens.includes(token)
+      )
+      if (!ingredientHit) {
+        continue
+      }
+    }
+
+    let score = 0
+
+    for (const token of tokens) {
+      if (item.searchTokens.includes(token)) {
+        score += 4
+      }
+    }
+
+    if (desiredDosageForm && candidateForm === desiredDosageForm) {
+      score += 12
+    } else if (candidateForm && desiredDosageForm && candidateForm !== desiredDosageForm) {
+      score -= 8
+    }
+
+    if (desiredRoute) {
+      if (candidateRoutes.includes(desiredRoute)) {
+        score += 6
+      } else if (candidateRoutes.length > 0) {
+        score -= 6
+      }
+    }
+
+    const strengthMatchBonus = computeStrengthScore(item, numericTokens, unitTokens)
+    score += strengthMatchBonus
+
+    if (score > 0) {
+      candidates.push({ item, score })
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score)
+  return candidates.slice(0, 100)
+}
+
+function computeStrengthScore(
+  item: LocalNdcItem,
+  numericTokens: Set<string>,
+  unitTokens: Set<string>
+): number {
+  if (numericTokens.size === 0) return 0
+  let score = 0
+
+  const strengthStrings = item.activeIngredients
+    .map((ingredient) => ingredient.strength?.toLowerCase() ?? '')
+    .filter(Boolean)
+
+  for (const numeric of numericTokens) {
+    if (!/\d/.test(numeric)) continue
+    const hits = strengthStrings.some((strength) => strength.includes(numeric))
+    if (hits) {
+      score += 8
+      if (unitTokens.size > 0) {
+        const unitHit = strengthStrings.some((strength) =>
+          Array.from(unitTokens).some((unit) => strength.includes(unit))
+        )
+        if (unitHit) {
+          score += 4
+        }
+      }
+    }
+  }
+
+  // inspect package descriptions for extra signal
+  for (const pkg of item.packages) {
+    const desc = pkg.description?.toLowerCase() ?? ''
+    if (!desc) continue
+    const numericHit = Array.from(numericTokens).some((token) => desc.includes(token))
+    if (numericHit) {
+      score += 3
+      if (unitTokens.size > 0) {
+        const unitHit = Array.from(unitTokens).some((unit) => desc.includes(unit))
+        if (unitHit) {
+          score += 2
+        }
+      }
+    }
+  }
+
+  return score
+}
+
+function canonicalDosageForm(form?: string): string | undefined {
+  if (!form) return undefined
+  const normalized = form.toLowerCase()
+  if (normalized.includes('tablet')) return 'tablet'
+  if (normalized.includes('capsule')) return 'capsule'
+  if (normalized.includes('caplet')) return 'capsule'
+  if (normalized.includes('solution')) return 'solution'
+  if (normalized.includes('suspension')) return 'suspension'
+  if (normalized.includes('injection') || normalized.includes('injectable')) return 'injection'
+  if (normalized.includes('patch')) return 'patch'
+  if (normalized.includes('cream')) return 'cream'
+  if (normalized.includes('ointment')) return 'ointment'
+  if (normalized.includes('gel')) return 'gel'
+  if (normalized.includes('spray')) return 'spray'
+  if (normalized.includes('powder')) return 'powder'
+  if (normalized.includes('granule')) return 'granule'
+  if (normalized.includes('pen')) return 'pen'
+  if (normalized.includes('kit')) return 'kit'
+  return normalized.split(',')[0]?.trim()
+}
+
+function canonicalRoute(route?: string): string | undefined {
+  if (!route) return undefined
+  const normalized = route.toLowerCase()
+  if (normalized.includes('oral') || normalized === 'po') return 'oral'
+  if (normalized.includes('intravenous') || normalized === 'iv') return 'intravenous'
+  if (normalized.includes('injection') || normalized.includes('intramuscular') || normalized === 'im') {
+    return 'injection'
+  }
+  if (normalized.includes('subcutaneous') || normalized === 'sc' || normalized === 'sq') {
+    return 'subcutaneous'
+  }
+  if (normalized.includes('topical')) return 'topical'
+  if (normalized.includes('transdermal')) return 'transdermal'
+  if (normalized.includes('ophthalmic')) return 'ophthalmic'
+  if (normalized.includes('otic')) return 'otic'
+  if (normalized.includes('nasal')) return 'nasal'
+  if (normalized.includes('inhalation')) return 'inhalation'
+  return normalized
+}
+
+function deriveRoute(sig?: string): string | undefined {
+  if (!sig) return undefined
+  const text = sig.toLowerCase()
+  if (/\b(po|by mouth|orally|oral)\b/.test(text)) return 'oral'
+  if (/\bintravenous\b|\biv\b/.test(text)) return 'intravenous'
+  if (/\bintramuscular\b|\bim\b/.test(text)) return 'injection'
+  if (/\bsubcutaneous\b|\bsc\b|\bsq\b/.test(text)) return 'subcutaneous'
+  if (/\btopical\b|\bapply\b/.test(text)) return 'topical'
+  if (/\binhale\b|\binhalation\b/.test(text)) return 'inhalation'
+  if (/\bophthalmic\b|\beye\b/.test(text)) return 'ophthalmic'
+  if (/\botic\b|\bear\b/.test(text)) return 'otic'
+  if (/\bnasal\b/.test(text)) return 'nasal'
+  return undefined
+}
+
+function guessDosageFormFromText(drug: string, sig?: string): string | undefined {
+  const combined = `${drug ?? ''} ${sig ?? ''}`.toLowerCase()
+  if (!combined.trim()) return undefined
+  const tokens = combined.split(/[\s,]+/).filter(Boolean)
+  return guessDosageForm(tokens)
 }
 

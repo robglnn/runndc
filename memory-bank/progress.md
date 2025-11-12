@@ -16,4 +16,8 @@
 - Promoted inactive warnings in the UI with a red banner summarizing expired NDCs so pharmacists can’t miss them, and ensured API responses carry structured inactive metadata (`inactiveNdcs`).
 - Embedded the FDA snapshot as a base64 asset bundled with the app so serverless functions and tests always ship with the full dataset—no more file-system misses causing inactive checks to fail.
 - Pending: production smoke tests (5 scenarios + manual verification), screenshot collateral, and decision on manual package entry / supplemental FDA data.
+- 2025-11-12 (CST)
+  - Hardened AI/local index ranking for text-only prescriptions by enforcing ingredient, dosage-form, and route filters with weighted scoring so oral requests (e.g., “Metformin 500 mg tablet”) no longer surface IV bags; fallbacks relax gracefully if no strict match remains.
+  - Updated `/api/calc` drug labeling to favor RxNorm/preferred product names over raw FDA ingredient descriptions, keeping the “Results Drug” header pharmacist-friendly.
+  - Re-ran Vitest suite (21 tests) to confirm pipeline stability after ranking and labeling adjustments.
 

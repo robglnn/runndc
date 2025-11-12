@@ -50,7 +50,10 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
         fdaIssues = result.issues
         unparsedPackages = result.unparsedPackages
         lookupType = 'ndc'
-        lookupName = packages?.[0]?.productName ?? packages?.[0]?.description ?? packages?.[0]?.labelerName
+        lookupName =
+          packages?.find((pkg) => pkg.productName)?.productName ??
+          packages?.[0]?.labelerName ??
+          undefined
       } catch (error) {
         return json(
           { success: false, error: `FDA lookup failed: ${(error as Error).message}` },
@@ -77,7 +80,11 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
         packages = result.packages
         fdaIssues = result.issues
         unparsedPackages = result.unparsedPackages
-        lookupName = rxnormResult.name ?? packages?.[0]?.productName ?? packages?.[0]?.description
+        lookupName =
+          rxnormResult.name ??
+          packages?.find((pkg) => pkg.productName)?.productName ??
+          packages?.[0]?.labelerName ??
+          undefined
       } catch (error) {
         return json(
           { success: false, error: `FDA lookup failed: ${(error as Error).message}` },
