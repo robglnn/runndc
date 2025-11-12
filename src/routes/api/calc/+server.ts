@@ -148,21 +148,25 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       packages: packages ?? []
     })
 
-    const issueMessages = fdaIssues
+    const priority = { inactive: 0, unsupported_unit: 1, no_packages: 2 } as const
+    const issueMessages = [...fdaIssues]
+      .sort(
+        (a, b) =>
+          ((priority as Record<string, number>)[a.type] ?? 99) -
+          ((priority as Record<string, number>)[b.type] ?? 99)
+      )
       .map((issue) => {
+        if (issue.type === 'inactive') {
+          const displayNdc = issue.ndc ?? 'NDC'
+          const expiry = issue.description ? ` (expired ${issue.description})` : ''
+          return `${displayNdc} is inactive${expiry}. Select an active package before dispensing.`
+        }
       if (issue.type === 'unsupported_unit') {
         const unit = issue.unit ?? 'unknown unit'
         return `FDA returned a package (${issue.ndc ?? 'NDC'}) using unsupported unit "${unit}". Try searching by drug name or selecting a different NDC.`
       }
       if (issue.type === 'no_packages') {
         return 'FDA returned no package records for this NDC/RxCUI.'
-      }
-      if (issue.type === 'inactive') {
-        const displayNdc = issue.ndc
-          ? issue.ndc.replace(/-0(\d{3})-/, '-$1-')
-          : 'NDC'
-        const expiry = issue.description ? ` (expired ${issue.description})` : ''
-        return `${displayNdc} is inactive${expiry}. Select an active package before dispensing.`
       }
       return null
       })
