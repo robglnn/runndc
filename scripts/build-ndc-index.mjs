@@ -8,6 +8,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const OUTPUT_PATH = path.resolve(__dirname, '../src/lib/data/ndc-index.json.gz')
+const BASE64_TEXT_PATH = path.resolve(__dirname, '../src/lib/data/ndc-index.base64.txt')
 const DATASET_URL = 'https://download.open.fda.gov/drug/ndc/drug-ndc-0001-of-0001.json.zip'
 
 async function downloadDataset() {
@@ -96,6 +97,9 @@ async function buildIndex() {
   const serialized = JSON.stringify(output)
   const compressed = zlib.gzipSync(serialized)
   await fs.promises.writeFile(OUTPUT_PATH, compressed)
+
+  const base64 = compressed.toString('base64')
+  await fs.promises.writeFile(BASE64_TEXT_PATH, base64)
 
   const duration = ((Date.now() - startedAt) / 1000).toFixed(1)
   const sizeMb = (compressed.length / (1024 * 1024)).toFixed(2)
