@@ -50,7 +50,20 @@ const BASE_TOKENS = [
   'day',
   'supply'
 ]
-const UNIT_TOKENS = ['mg', 'mcg', 'g', 'ml', 'unit', 'units', 'meq']
+const UNIT_TOKENS = [
+  'mg',
+  'mcg',
+  'g',
+  'ml',
+  'unit',
+  'units',
+  'meq',
+  'puff',
+  'actuation',
+  'actuations',
+  'inhalation',
+  'inhalations'
+]
 
 export async function suggestNdcViaAi(params: {
   drug: string
@@ -330,6 +343,7 @@ function guessDosageForm(tokens: string[]): string | undefined {
     'solution',
     'suspension',
     'inhaler',
+    'aerosol',
     'patch',
     'cream',
     'ointment',
@@ -570,6 +584,9 @@ function canonicalDosageForm(form?: string): string | undefined {
   if (normalized.includes('caplet')) return 'capsule'
   if (normalized.includes('solution')) return 'solution'
   if (normalized.includes('suspension')) return 'suspension'
+  if (normalized.includes('inhaler') || normalized.includes('aerosol') || normalized.includes('inhalant')) {
+    return 'inhaler'
+  }
   if (normalized.includes('injection') || normalized.includes('injectable')) return 'injection'
   if (normalized.includes('patch')) return 'patch'
   if (normalized.includes('cream')) return 'cream'

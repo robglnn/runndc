@@ -20,4 +20,6 @@
   - Hardened AI/local index ranking for text-only prescriptions by enforcing ingredient, dosage-form, and route filters with weighted scoring so oral requests (e.g., “Metformin 500 mg tablet”) no longer surface IV bags; fallbacks relax gracefully if no strict match remains.
   - Updated `/api/calc` drug labeling to favor RxNorm/preferred product names over raw FDA ingredient descriptions, keeping the “Results Drug” header pharmacist-friendly.
   - Re-ran Vitest suite (21 tests) to confirm pipeline stability after ranking and labeling adjustments.
+  - Parsed aerosol/metered inhaler packages by expanding unit normalization (aerosol → puff, inhaler devices) so albuterol demo now returns active canisters; added canonical dosage-form mapping for inhalers and covered the scenario with a Vitest unit test.
+  - Removed the AI confidence badge from the UI recommendation card per stakeholder feedback to keep guidance concise.
 
