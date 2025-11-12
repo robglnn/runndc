@@ -252,6 +252,34 @@
       </p>
     </header>
 
+    {#if result?.inactiveNdcs && result.inactiveNdcs.length > 0}
+      <div class="rounded-3xl border-4 border-red-700 bg-red-600/90 p-6 text-white shadow-lg">
+        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 class="text-2xl font-bold tracking-wide">Inactive NDC Detected</h3>
+            <p class="mt-1 text-sm text-red-100">
+              Do not dispense these packages. Select an active NDC before proceeding.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 text-sm md:text-base">
+            <span class="rounded-full bg-white/20 px-3 py-1 font-semibold uppercase">
+              {result.inactiveNdcs.length} flagged
+            </span>
+          </div>
+        </div>
+        <ul class="mt-4 space-y-2 text-sm md:text-base">
+          {#each result.inactiveNdcs as inactive}
+            <li class="rounded-2xl bg-white/15 px-4 py-3 font-medium">
+              <span class="text-white">{inactive.ndc}</span>
+              {#if inactive.expiry}
+                <span class="ml-2 text-red-200">(expired {inactive.expiry})</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
+
     {#if result}
       <div class="grid gap-6 lg:grid-cols-4">
         <article class="rounded-3xl bg-white p-6 shadow-lg ring-1 ring-amber-100">

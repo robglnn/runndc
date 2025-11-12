@@ -55,6 +55,10 @@ export interface CalcResult {
     rationale: string
     confidence?: number
   }
+  inactiveNdcs?: Array<{
+    ndc: string
+    expiry?: string
+  }>
 }
 
 export interface OverageGuidance {

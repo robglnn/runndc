@@ -149,6 +149,13 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
     })
 
     const priority = { inactive: 0, unsupported_unit: 1, no_packages: 2 } as const
+    const inactiveIssues = fdaIssues
+      .filter((issue) => issue.type === 'inactive')
+      .map((issue) => ({
+        ndc: issue.ndc ?? drug,
+        expiry: issue.description ?? undefined
+      }))
+
     const issueMessages = [...fdaIssues]
       .sort(
         (a, b) =>
@@ -180,6 +187,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       drugName: lookupName ?? drug,
       unparsedPackages,
       aiSuggestion: aiSuggestion ?? undefined,
+      inactiveNdcs: inactiveIssues,
       json: buildResultJson({
         drug,
         days,
@@ -188,6 +196,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
         calc: calcResult,
         drugName: lookupName ?? drug,
         unparsedPackages,
+        inactiveNdcs: inactiveIssues,
         aiSuggestion: aiSuggestion ?? undefined
       })
     }
@@ -207,7 +216,8 @@ function buildResultJson({
   calc,
   drugName,
   unparsedPackages,
-  aiSuggestion
+  aiSuggestion,
+  inactiveNdcs
 }: {
   drug: string
   days: number
@@ -217,6 +227,7 @@ function buildResultJson({
   drugName: string
   unparsedPackages: UnparsedPackage[]
   aiSuggestion?: CalcResult['aiSuggestion']
+  inactiveNdcs?: CalcResult['inactiveNdcs']
 }): string {
   const payload = {
     input: { drug, sig, days, lookupType },
@@ -234,6 +245,7 @@ function buildResultJson({
       inactive: ndc.inactive
     })),
     unparsedPackages,
+    inactiveNdcs,
     aiSuggestion,
     generatedAt: new Date().toISOString()
   }
