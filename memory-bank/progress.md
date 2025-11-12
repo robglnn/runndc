@@ -13,5 +13,6 @@
 - Hardened external integrations: wrap RxNorm/FDA JSON parsing with diagnostics, add logging when local index missing, and catch OpenAI failures so `/api/calc` never returns 500 on bad upstream responses.
 - Enabled deterministic fallback when OpenAI is unavailable: use local index token scoring to recommend NDCs and display rationale so production always returns guidance.
 - Flag inactive NDCs by merging marketing-end dates from the local FDA snapshot; when live FDA lookups 404 or return only expired packages we now surface an explicit inactive warning (and mark packages as inactive in the UI).
+- Promoted inactive warnings in the UI with a red banner summarizing expired NDCs so pharmacists can’t miss them, and ensured API responses carry structured inactive metadata (`inactiveNdcs`).
 - Pending: production smoke tests (5 scenarios + manual verification), screenshot collateral, and decision on manual package entry / supplemental FDA data.
 
