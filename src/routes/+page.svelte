@@ -343,12 +343,12 @@
           {/if}
         </article>
 
-        <article class="rounded-3xl bg-white p-6 shadow-lg ring-1 ring-amber-100">
+        <article class="rounded-3xl bg-white p-6 shadow-lg ring-1 ring-amber-100 min-h-[220px]">
           <div class="text-sm font-semibold uppercase tracking-wide text-amber-600">Warnings</div>
           {#if warnings.length > 0}
-            <ul class="mt-4 space-y-2 text-sm text-red-700">
+            <ul class="mt-4 space-y-3 text-sm text-red-700">
               {#each warnings as warning}
-                <li class="rounded-lg bg-red-50 px-3 py-2">{warning}</li>
+                <li class="rounded-lg bg-red-50 px-4 py-3 leading-relaxed">{warning}</li>
               {/each}
             </ul>
           {:else}
