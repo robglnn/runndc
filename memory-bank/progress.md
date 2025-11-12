@@ -14,5 +14,6 @@
 - Enabled deterministic fallback when OpenAI is unavailable: use local index token scoring to recommend NDCs and display rationale so production always returns guidance.
 - Flag inactive NDCs by merging marketing-end dates from the local FDA snapshot; when live FDA lookups 404 or return only expired packages we now surface an explicit inactive warning (and mark packages as inactive in the UI).
 - Promoted inactive warnings in the UI with a red banner summarizing expired NDCs so pharmacists can’t miss them, and ensured API responses carry structured inactive metadata (`inactiveNdcs`).
+- Embedded the FDA snapshot as a base64 asset bundled with the app so serverless functions and tests always ship with the full dataset—no more file-system misses causing inactive checks to fail.
 - Pending: production smoke tests (5 scenarios + manual verification), screenshot collateral, and decision on manual package entry / supplemental FDA data.
 
