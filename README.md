@@ -40,9 +40,13 @@ The dev server runs at `http://localhost:5173`.
   - normalizes 10/11-digit NDC inputs (Maryland rules, 5-4-2 display),
   - looks up RxCUI via RxNorm (with OpenAI fallback suggestion),
   - fetches FDA NDC packages and flags inactive entries,
+  - cross-references a bundled openFDA NDC snapshot (base64+gzip) to guarantee lookups in serverless environments and to re-check inactivity when live data is incomplete,
   - parses SIG strings (regex-first, OpenAI fallback) and computes quantities,
   - applies FDA 2011 overage guidance, warning above 12% overfill,
   - returns structured JSON alongside UI cards and warnings.
+- Deterministic AI fallback that still provides NDC guidance if OpenAI is unavailable by ranking the local index.
+- Explicit inactive warning banner plus warning prioritization so expired codes are impossible to miss.
+- Expanded package parser to handle aerosol/metered inhalers, device counts, and other complex descriptions surfaced from FDA data.
 - Global error modal backed by Svelte store for graceful failure handling.
 - Copy-ready JSON output for downstream claim/prescription systems.
 
