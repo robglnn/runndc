@@ -195,8 +195,27 @@ function collectPackages(
   }
 
   const deduped = [...seen.values()].sort((a, b) => a.size - b.size)
-  if (deduped.length > 0 && deduped.every((pkg) => pkg.inactive)) {
-    issues.push({ type: 'inactive', ndc: deduped[0].formattedNdc })
+  if (deduped.length > 0) {
+    const expiryFromIndex = markInactivePackagesFromLocalIndex(deduped, localIndex, today)
+    if (expiryFromIndex && issues.every((issue) => issue.type !== 'inactive')) {
+      issues.push({
+        type: 'inactive',
+        ndc: deduped[0].formattedNdc,
+        description: expiryFromIndex ?? undefined
+      })
+    } else if (deduped.every((pkg) => pkg.inactive) && issues.every((issue) => issue.type !== 'inactive')) {
+      const latestExpiry =
+        deduped
+          .map((pkg) => pkg.marketingEndDate)
+          .filter((date): date is string => Boolean(date))
+          .sort()
+          .pop() ?? undefined
+      issues.push({
+        type: 'inactive',
+        ndc: deduped[0].formattedNdc,
+        description: latestExpiry
+      })
+    }
   }
   return deduped
 }
@@ -331,5 +350,81 @@ function normalizeDateString(dateString?: string | null): string | null {
     return `${dateString.slice(0, 4)}-${dateString.slice(4, 6)}-${dateString.slice(6, 8)}`
   }
   return dateString
+}
+
+function markInactivePackagesFromLocalIndex(
+  packages: NdcPackage[],
+  localIndex: LocalNdcIndex | null,
+  today: Date
+): string | null {
+  if (!localIndex || packages.length === 0) return null
+
+  let allInactive = true
+  let latestExpiry: string | null = null
+
+  for (const pkg of packages) {
+    if (pkg.marketingEndDate && (!latestExpiry || pkg.marketingEndDate > latestExpiry)) {
+      latestExpiry = pkg.marketingEndDate
+    }
+
+    if (pkg.inactive) continue
+
+    const entry = resolveLocalPackage(localIndex, pkg)
+    if (!entry) {
+      allInactive = false
+      continue
+    }
+
+    const normalizedEnd = normalizeDateString(entry.pkg.marketingEndDate)
+    if (normalizedEnd && isBeforeToday(normalizedEnd, today)) {
+      pkg.inactive = true
+      pkg.marketingEndDate = normalizedEnd
+      if (!latestExpiry || normalizedEnd > latestExpiry) {
+        latestExpiry = normalizedEnd
+      }
+    } else {
+      allInactive = false
+    }
+  }
+
+  if (!allInactive) {
+    return null
+  }
+
+  for (const pkg of packages) {
+    if (!pkg.marketingEndDate) continue
+    if (!latestExpiry || pkg.marketingEndDate > latestExpiry) {
+      latestExpiry = pkg.marketingEndDate
+    }
+  }
+
+  return latestExpiry
+}
+
+function resolveLocalPackage(
+  localIndex: LocalNdcIndex,
+  pkg: NdcPackage
+): { product: LocalNdcItem; pkg: LocalPackage } | undefined {
+  const candidates = new Set<string>()
+  const digits = pkg.ndc.replace(/\D/g, '')
+  candidates.add(pkg.ndc)
+  candidates.add(pkg.formattedNdc)
+  candidates.add(digits)
+  if (digits.startsWith('0')) {
+    const trimmed = digits.slice(1)
+    if (trimmed) {
+      candidates.add(trimmed)
+      if (trimmed.length === 10) {
+        candidates.add(`${trimmed.slice(0, 4)}-${trimmed.slice(4, 8)}-${trimmed.slice(8)}`)
+      }
+    }
+  }
+
+  for (const key of candidates) {
+    const entry = localIndex.packageMap.get(key)
+    if (entry) return entry
+  }
+
+  return undefined
 }
 

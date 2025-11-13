@@ -1,5 +1,5 @@
 import { gunzipSync } from 'zlib'
-import { normalizeNdc } from '$lib/ndcUtils'
+import { formatNdc11, normalizeNdc } from '$lib/ndcUtils'
 import ndcIndexGzipBase64 from '$lib/data/ndc-index.base64.txt?raw'
 
 interface RawNdcIndex {
@@ -33,6 +33,7 @@ interface RawNdcItem {
 export interface LocalPackage {
   ndc: string
   ndcPlain: string
+  normalizedNdc: string | null
   description: string | null
   marketingStartDate: string | null
   marketingEndDate: string | null
@@ -95,10 +96,17 @@ async function loadIndex(): Promise<LocalNdcIndex> {
       const ndc = pkg.ndc
       const ndcPlain = pkg.ndcPlain ?? normalizePlain(ndc)
       if (!ndcPlain) continue
+      let normalizedNdc: string | null = null
+      try {
+        normalizedNdc = normalizeNdc(ndcPlain.length === 10 ? ndc : ndcPlain)
+      } catch {
+        normalizedNdc = null
+      }
 
       const localPkg: LocalPackage = {
         ndc,
         ndcPlain,
+        normalizedNdc,
         description: pkg.description ?? null,
         marketingStartDate: pkg.marketingStartDate ?? null,
         marketingEndDate: pkg.marketingEndDate ?? null,
@@ -138,6 +146,12 @@ async function loadIndex(): Promise<LocalNdcIndex> {
     for (const pkg of packages) {
       packageMap.set(pkg.ndcPlain, { product: item, pkg })
       packageMap.set(pkg.ndc, { product: item, pkg })
+      if (pkg.normalizedNdc) {
+        packageMap.set(pkg.normalizedNdc, { product: item, pkg })
+        if (pkg.normalizedNdc.length === 11) {
+          packageMap.set(formatNdc11(pkg.normalizedNdc), { product: item, pkg })
+        }
+      }
     }
   }
 

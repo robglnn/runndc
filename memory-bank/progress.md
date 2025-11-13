@@ -22,4 +22,5 @@
   - Re-ran Vitest suite (21 tests) to confirm pipeline stability after ranking and labeling adjustments.
   - Parsed aerosol/metered inhaler packages by expanding unit normalization (aerosol → puff, inhaler devices) so albuterol demo now returns active canisters; added canonical dosage-form mapping for inhalers and covered the scenario with a Vitest unit test.
   - Removed the AI confidence badge from the UI recommendation card per stakeholder feedback to keep guidance concise.
+  - Restored inactive-banner reliability by enriching the local index with normalized 11-digit NDC keys and cross-checking parsed FDA packages against it—if every package is expired we now mark them inactive even when marketing_end_date is missing from the live payload.
 
