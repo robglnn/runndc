@@ -183,7 +183,7 @@ New: Include NDC input demo – e.g., { drug: "5024204062", ... } → tests 11-d
 - [ ] Story 3.4: Final Polish & Deploy
 
 - [x] Mobile: form stacks vertically
-- [x] Footer: © 2025 Foundation Health · RUN NDC v1.0 · GitHub link
+- [x] Footer: © 2025 Health Helper · RUN NDC v1.0 · GitHub link
 - [x] README.md with Vercel badge, local run instructions *(screenshots pending)*
 - [x] Commit PRD_v1.1.md with all decisions (add NDC 11-digit rules)
 - [x] Merge all feat/* branches → main

@@ -100,4 +100,4 @@ Each scenario validates parsing, normalization, and overfill logic across common
 
 ---
 
-© 2025 Foundation Health · RUN NDC v1.0
+© 2025 Health Helper · RUN NDC v1.0

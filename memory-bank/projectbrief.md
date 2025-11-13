@@ -1,7 +1,7 @@
 ## Project Brief
 
 **Project:** RUN NDC – NDC Packaging & Quantity Calculator  
-**Organization:** Foundation Health  
+**Organization:** Health Helper  
 **Status:** MVP sprint locked (PRD v1.1 approved Nov 10, 2025)  
 **Goal:** Deliver a demo-ready SvelteKit application that accurately matches prescriptions to valid NDCs, computes dispense quantities, and surfaces warnings, with a Function Health-inspired UI and deployment on Vercel by end of day.
 

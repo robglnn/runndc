@@ -11,7 +11,7 @@
 
 <footer class="border-t border-amber-100/70 bg-amber-50/90 py-6 text-sm text-neutral-600">
   <div class="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 px-6 sm:flex-row">
-    <span>© 2025 Foundation Health · RUN NDC v1.0</span>
+    <span>© 2025 Health Helper · RUN NDC v1.0</span>
     <a
       href="https://github.com/robglnn/runndc"
       target="_blank"
