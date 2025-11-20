@@ -344,8 +344,6 @@
                 <li class="rounded-lg bg-red-50 px-4 py-3 leading-relaxed">{warning}</li>
               {/each}
             </ul>
-          {:else}
-            <p class="mt-4 text-sm text-neutral-600">No warnings. You’re clear to proceed.</p>
           {/if}
         </article>
       </div>
