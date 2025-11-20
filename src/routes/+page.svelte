@@ -110,7 +110,7 @@
     <div class="grid items-center gap-10 lg:grid-cols-[1.4fr,1fr]">
       <div class="space-y-6">
         <span class="inline-flex rounded-full bg-amber-100 px-4 py-1 text-sm font-medium text-amber-600">
-          RUN NDC · MVP Sprint
+          RUN NDC
         </span>
         <h1 class="text-4xl font-semibold text-neutral-900 sm:text-5xl">
           NDC Packaging &amp; Quantity Calculator
@@ -337,7 +337,7 @@
         </article>
 
         <article class="rounded-3xl bg-white p-6 shadow-lg ring-1 ring-amber-100 min-h-[220px]">
-          <div class="text-sm font-semibold uppercase tracking-wide text-amber-600">Warnings</div>
+          <div class="text-sm font-semibold uppercase tracking-wide text-amber-600">ADDTL INFO</div>
           {#if warnings.length > 0}
             <ul class="mt-4 space-y-3 text-sm text-red-700">
               {#each warnings as warning}

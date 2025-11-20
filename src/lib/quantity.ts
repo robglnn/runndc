@@ -57,14 +57,15 @@ export function buildCalcResult({
     warnings.push(`Recommended NDC ${primary.formattedNdc} is inactive. Select an alternate package.`)
   }
 
-  if (primary.overfillPct > 0.12) {
-    warnings.push(
-      `Overfill ${overfillPct}% exceeds 12% tolerance. FDA guidance (${guidance?.notes ?? '2011 allowance'})
- recommends limiting excess fill. Consider alternative packaging or manual adjustment.`
-    )
-  } else if (guidance) {
-    warnings.push(`FDA 2011 overage guidance: ${guidance.notes}`)
-  }
+  // FDA overage warnings deactivated per user request
+  // if (primary.overfillPct > 0.12) {
+  //   warnings.push(
+  //     `Overfill ${overfillPct}% exceeds 12% tolerance. FDA guidance (${guidance?.notes ?? '2011 allowance'})
+  //  recommends limiting excess fill. Consider alternative packaging or manual adjustment.`
+  //   )
+  // } else if (guidance) {
+  //   warnings.push(`FDA 2011 overage guidance: ${guidance.notes}`)
+  // }
 
   return {
     ndcs: selections.slice(0, 5),
