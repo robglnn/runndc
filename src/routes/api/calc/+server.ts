@@ -116,9 +116,10 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
             productNdc: aiResult.product.productNdc,
             packageCount: packages.length
           })
-          warnings.push(
-            `AI suggested product ${aiResult.product.productNdc}. ${aiResult.rationale}`
-          )
+          // AI suggestion warning deactivated per user request
+          // warnings.push(
+          //   `AI suggested product ${aiResult.product.productNdc}. ${aiResult.rationale}`
+          // )
           if (converted.issues.length) {
             fdaIssues = [...fdaIssues, ...converted.issues]
           }
@@ -132,9 +133,10 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
             })
           }
         } else {
-          warnings.push(
-            `AI suggested product ${aiResult.product.productNdc} but its packages could not be parsed. ${aiResult.rationale}`
-          )
+          // AI suggestion warning deactivated per user request
+          // warnings.push(
+          //   `AI suggested product ${aiResult.product.productNdc} but its packages could not be parsed. ${aiResult.rationale}`
+          // )
         }
       }
     }
@@ -180,7 +182,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
         return `FDA returned a package (${issue.ndc ?? 'NDC'}) using unsupported unit "${unit}". Try searching by drug name or selecting a different NDC.`
       }
       if (issue.type === 'no_packages') {
-        return 'FDA returned no package records for this NDC/RxCUI.'
+        // FDA no package records warning deactivated per user request
+        // return 'FDA returned no package records for this NDC/RxCUI.'
+        return null
       }
       return null
       })
